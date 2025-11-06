@@ -22,15 +22,23 @@ def main():
     """Main function to start the human tracking car system."""
     
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Human Tracking Car with Pure Visual Tracking')
-    parser.add_argument('--detector', choices=['yolo', 'hog', 'auto'], default='auto',
-                       help='Detection method: yolo (YOLOv8n), hog (traditional), auto (try YOLO first)')
+    parser = argparse.ArgumentParser(description='Human Tracking Car with Multiple Detection Options')
+    parser.add_argument('--detector', 
+                       choices=['yolo', 'hog', 'motion', 'edge', 'color', 'background', 'auto'], 
+                       default='auto',
+                       help='Detection method: yolo (YOLOv8n), hog (traditional), motion (ultra-light), edge (lightweight), color (skin-based), background (MOG2), auto (intelligent selection)')
+    parser.add_argument('--platform', 
+                       choices=['raspberry_pi_zero', 'raspberry_pi_3', 'raspberry_pi_4', 'other'],
+                       default='other',
+                       help='Hardware platform for optimal detector selection')
     args = parser.parse_args()
     
     detector_choice = args.detector
+    platform = args.platform
     
     logger.info("Starting Human Tracking Car System...")
     logger.info(f"Detection method: {detector_choice}")
+    logger.info(f"Hardware platform: {platform}")
     logger.info("Mode: Pure Visual Tracking (no ultrasonic sensor)")
     
     try:
@@ -56,8 +64,14 @@ def main():
                 
                 logger.info("Initializing human tracker...")
                 
-                # Determine which tracker to use (pure visual mode)
-                if detector_choice == 'yolo':
+                # Determine which tracker to use
+                if detector_choice in ['motion', 'edge', 'color', 'background']:
+                    # Use ultra-lightweight trackers
+                    from src.tracking.ultra_light_tracker import UltraLightHumanTracker
+                    human_tracker = UltraLightHumanTracker(camera_manager, motor_controller, detector_choice)
+                    logger.info(f"Ultra-lightweight {detector_choice} tracker ready")
+                    
+                elif detector_choice == 'yolo':
                     # Force YOLO
                     try:
                         from src.tracking.yolo_human_tracker import YOLOHumanTracker
@@ -74,16 +88,38 @@ def main():
                     logger.info("HOG human tracker ready (pure visual)")
                         
                 else:  # auto
-                    # Try YOLO first, fallback to HOG
+                    # Intelligent selection based on platform
                     try:
-                        from src.tracking.yolo_human_tracker import YOLOHumanTracker
-                        human_tracker = YOLOHumanTracker(camera_manager, motor_controller)
-                        logger.info("Auto-selected YOLOv8n human tracker (pure visual)")
+                        from config.lightweight_detector_config import recommend_detector
+                        recommended, details = recommend_detector(
+                            platform=platform,
+                            scenario='real_time_following',
+                            performance_target='balanced'
+                        )
+                        logger.info(f"Auto-selection recommended: {recommended} (based on {details})")
+                        
+                        # Try recommended lightweight detector first
+                        if recommended in ['motion', 'edge', 'color', 'background']:
+                            from src.tracking.ultra_light_tracker import UltraLightHumanTracker
+                            human_tracker = UltraLightHumanTracker(camera_manager, motor_controller, recommended)
+                            logger.info(f"Auto-selected ultra-lightweight {recommended} tracker")
+                        else:
+                            # Fall back to traditional detectors
+                            try:
+                                from src.tracking.yolo_human_tracker import YOLOHumanTracker
+                                human_tracker = YOLOHumanTracker(camera_manager, motor_controller)
+                                logger.info("Auto-selected YOLOv8n human tracker")
+                            except Exception as e:
+                                logger.warning(f"YOLO not available ({e}), falling back to HOG")
+                                from src.tracking.human_tracker import HumanTracker
+                                human_tracker = HumanTracker(camera_manager, motor_controller)
+                                logger.info("Auto-selected HOG human tracker")
+                                
                     except Exception as e:
-                        logger.warning(f"YOLO not available ({e}), falling back to HOG")
-                        from src.tracking.human_tracker import HumanTracker
-                        human_tracker = HumanTracker(camera_manager, motor_controller)
-                        logger.info("Fallback: HOG human tracker ready (pure visual)")
+                        logger.warning(f"Auto-selection failed ({e}), using motion detection")
+                        from src.tracking.ultra_light_tracker import UltraLightHumanTracker
+                        human_tracker = UltraLightHumanTracker(camera_manager, motor_controller, 'motion')
+                        logger.info("Fallback: motion detection tracker")
                 
                 # Update app with real components
                 setattr(app, 'human_tracker', human_tracker)  # Safe attribute assignment
