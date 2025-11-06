@@ -173,16 +173,17 @@ class HumanTracker:
         self.frame_width = 640
         self.frame_height = 480
         
-        # Target parameters
+        # Target parameters - PERCENTAGE-BASED DISTANCE CONTROL
         self.target_x = self.frame_width // 2  # Center of frame
-        self.target_distance = 150  # Target human height in pixels
+        self.target_human_percentage = 0.25  # Human should occupy 25% of frame height
+        self.target_distance = int(self.frame_height * self.target_human_percentage)  # 120 pixels for 480p
         
         # SPEED OPTIMIZED control parameters - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
         self.max_turn_speed = 25      # Further reduced from 35 to 25 for ultra-gentle turns
         self.max_forward_speed = 35   # Further reduced from 50 to 35 for ultra-gentle approach
         
-        # Edge detection and compensation
-        self.edge_threshold = 80      # Reduced from 100 for faster edge response
+        # Edge detection and compensation - IMPROVED
+        self.edge_threshold = 100     # Increased from 80 for earlier edge detection
         self.last_valid_center = None
         self.frames_since_detection = 0
         self.max_frames_without_detection = 5  # Reduced from 10 for faster timeout
@@ -339,22 +340,33 @@ class HumanTracker:
             self.frames_since_detection = 0
             self.last_valid_center = center_x
             
-            # Calculate errors
+            # Calculate errors - FIXED DISTANCE LOGIC
             x_error = center_x - self.target_x
-            distance_error = self.target_distance - human_height
+            
+            # PERCENTAGE-BASED DISTANCE CONTROL
+            current_percentage = human_height / self.frame_height
+            target_percentage = self.target_human_percentage
+            distance_error = target_percentage - current_percentage  # Positive = need to get closer
+            
+            # Convert percentage error to pixel equivalent for PID
+            distance_error_pixels = distance_error * self.frame_height
             
             # SPEED OPTIMIZATION: Simplified edge detection
             is_at_edge = center_x < self.edge_threshold or center_x > (self.frame_width - self.edge_threshold)
             
             # Calculate control outputs
             turn_output = self.pid_x.update(x_error)
-            speed_output = self.pid_distance.update(distance_error)
+            speed_output = self.pid_distance.update(distance_error_pixels)
             
-            # FIXED: Priority-based scaling for proper tracking behavior
+            # Debug logging
+            logger.debug(f"HOG_DISTANCE: current={current_percentage:.2%}, target={target_percentage:.2%}, "
+                        f"error={distance_error:.3f}")
+            
+            # FIXED: Edge behavior prioritization
             if is_at_edge:
-                # At edge: prioritize turning over distance control
-                turn_scale = 1.5  # INCREASE turn responsiveness at edge
-                speed_scale = 0.2  # REDUCE forward movement at edge
+                # At edge: FORCE turning, minimize distance control
+                turn_scale = 2.0     # STRONG turn response at edge
+                speed_scale = 0.1    # Minimal forward movement at edge
             else:
                 turn_scale = 1.0
                 speed_scale = 1.0
@@ -385,20 +397,26 @@ class HumanTracker:
             forward_speed = max(-self.max_forward_speed, min(self.max_forward_speed, speed_output * speed_scale))
             turn_speed = max(-self.max_turn_speed, min(self.max_turn_speed, turn_output * turn_scale))
             
-            # FIXED deadzones for proper behavior with edge override
-            x_deadzone = 40      # Reduced from 60 for better centering
-            distance_deadzone = 25  # Reduced to allow distance reactions
+            # FIXED deadzones for proper behavior with percentage-based distance
+            x_deadzone = 40      # Pixels for centering
+            distance_deadzone_percentage = 0.03  # 3% of frame height
+            distance_deadzone_pixels = distance_deadzone_percentage * self.frame_height
             
-            # EDGE OVERRIDE: Bypass deadzone when at edge for aggressive turning
-            if is_at_edge:
-                x_deadzone = 10  # Much smaller deadzone at edge
-                # Force turning even in deadzone
-                if abs(x_error) < 40 and turn_speed == 0:  # If deadzone killed turn_speed
-                    turn_speed = 15 if x_error > 0 else -15  # Force gentle turn
-            
+            # Apply deadzones
             if abs(x_error) < x_deadzone:
                 turn_speed = 0
-            if abs(distance_error) < distance_deadzone:
+            
+            if abs(distance_error_pixels) < distance_deadzone_pixels:
+                forward_speed = 0
+            
+            # ENHANCED EDGE OVERRIDE: Force turning at edge regardless of deadzone
+            if is_at_edge and turn_speed == 0:
+                # Force turn direction based on position at edge
+                edge_turn_strength = 20  # Gentle but definite turn
+                if center_x < self.frame_width // 2:
+                    turn_speed = -edge_turn_strength  # Turn left to center
+                else:
+                    turn_speed = edge_turn_strength   # Turn right to center
                 forward_speed = 0
             
             # STEP-BY-STEP TURNING LOGIC for ultra-smooth movement with edge override
