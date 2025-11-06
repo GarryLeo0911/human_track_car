@@ -12,7 +12,7 @@ from typing import Tuple, Optional, List
 logger = logging.getLogger(__name__)
 
 class HumanDetector:
-    """Human detection using HOG descriptor."""
+    """Human detection using HOG descriptor with improved accuracy."""
     
     def __init__(self):
         """Initialize the HOG descriptor for human detection."""
@@ -22,9 +22,13 @@ class HumanDetector:
         detector = cv2.HOGDescriptor.getDefaultPeopleDetector()
         self.hog.setSVMDetector(np.array(detector, dtype=np.float32))
         
+        # Detection history for stability
+        self.detection_buffer = []
+        self.buffer_size = 3
+        
     def detect_humans(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
         """
-        Detect humans in the frame.
+        Detect humans in the frame with improved accuracy.
         
         Args:
             frame: Input frame from camera
@@ -36,28 +40,31 @@ class HumanDetector:
             # Preprocess frame for better detection
             height, width = frame.shape[:2]
             
-            # Convert to grayscale for HOG (more stable)
+            # Convert to grayscale for HOG
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             
-            # SPEED OPTIMIZATION: Skip contrast enhancement for faster processing
-            # gray = cv2.equalizeHist(gray)  # Commented out for speed
+            # ACCURACY IMPROVEMENT: Apply contrast enhancement for better detection
+            gray = cv2.equalizeHist(gray)
             
-            # SPEED OPTIMIZATION: More aggressive resizing for faster detection
-            if width > 320:  # Reduced from 480 to 320 for speed
-                scale = 320 / width
-                new_width = 320
+            # ACCURACY IMPROVEMENT: Apply noise reduction
+            gray = cv2.GaussianBlur(gray, (3, 3), 0)
+            
+            # ACCURACY IMPROVEMENT: Less aggressive resizing for better detection
+            if width > 480:  # Increased from 320 back to 480 for better accuracy
+                scale = 480 / width
+                new_width = 480
                 new_height = int(height * scale)
                 gray_resized = cv2.resize(gray, (new_width, new_height))
             else:
                 gray_resized = gray.copy()
                 scale = 1.0
             
-            # STABILITY FIX: More conservative detection parameters
+            # ACCURACY IMPROVEMENT: Better detection parameters
             boxes, weights = self.hog.detectMultiScale(
                 gray_resized,
-                winStride=(6, 6),        # Compromise between (4,4) and (8,8)
-                padding=(12, 12),        # Compromise between (8,8) and (16,16)
-                scale=1.03               # Slightly smaller step for better detection
+                winStride=(4, 4),        # Smaller stride for better detection
+                padding=(8, 8),          # Standard padding
+                scale=1.02               # Smaller scale step for more thorough detection
             )
             
             # Scale boxes back to original size
@@ -65,20 +72,76 @@ class HumanDetector:
                 boxes = [(int(x/scale), int(y/scale), int(w/scale), int(h/scale)) 
                         for x, y, w, h in boxes]
             
-            # SPEED OPTIMIZATION: Simplified filtering for faster processing
+            # ACCURACY IMPROVEMENT: Better filtering with proper validation
             confident_boxes = []
             for i, (x, y, w, h) in enumerate(boxes):
-                # Relaxed confidence threshold for speed
-                if weights[i] > 0.2:  # Lowered from 0.3 for faster detection
-                    # Basic size filtering only
-                    if w > 20 and h > 40:  # Simplified from complex aspect ratio check
+                # Higher confidence threshold for better accuracy
+                if weights[i] > 0.4:  # Increased from 0.2 to 0.4 for better quality
+                    # Proper size and aspect ratio validation
+                    aspect_ratio = h / w if w > 0 else 0
+                    
+                    # Human-like proportions (height should be 1.5-4x width)
+                    if (w > 30 and h > 60 and  # Minimum size requirements
+                        aspect_ratio >= 1.5 and aspect_ratio <= 4.0 and  # Human proportions
+                        x >= 0 and y >= 0 and x + w <= width and y + h <= height):  # Within frame
                         confident_boxes.append((x, y, w, h))
             
-            return confident_boxes
+            # ACCURACY IMPROVEMENT: Temporal consistency filtering
+            self.detection_buffer.append(confident_boxes)
+            if len(self.detection_buffer) > self.buffer_size:
+                self.detection_buffer.pop(0)
+            
+            # Return stabilized detections
+            return self._stabilize_detections()
             
         except Exception as e:
             logger.error(f"Error in human detection: {e}")
             return []
+    
+    def _stabilize_detections(self) -> List[Tuple[int, int, int, int]]:
+        """
+        Stabilize detections using temporal information.
+        
+        Returns:
+            Stabilized list of detections
+        """
+        if not self.detection_buffer:
+            return []
+        
+        # Get the most recent detections
+        current_detections = self.detection_buffer[-1]
+        
+        # If we have enough history, validate against previous frames
+        if len(self.detection_buffer) >= 2:
+            stable_detections = []
+            
+            for current_box in current_detections:
+                x, y, w, h = current_box
+                center_x, center_y = x + w//2, y + h//2
+                
+                # Check if this detection is consistent with recent history
+                is_stable = False
+                for prev_detections in self.detection_buffer[:-1]:
+                    for prev_box in prev_detections:
+                        px, py, pw, ph = prev_box
+                        prev_center_x, prev_center_y = px + pw//2, py + ph//2
+                        
+                        # Check if centers are close (within 50 pixels)
+                        center_distance = ((center_x - prev_center_x)**2 + (center_y - prev_center_y)**2)**0.5
+                        if center_distance < 50:
+                            is_stable = True
+                            break
+                    
+                    if is_stable:
+                        break
+                
+                # Include detection if it's stable or if we don't have enough history
+                if is_stable or len(self.detection_buffer) < 2:
+                    stable_detections.append(current_box)
+            
+            return stable_detections
+        else:
+            return current_detections
 
 
 class HumanTracker:
@@ -123,17 +186,17 @@ class HumanTracker:
         self.frames_since_detection = 0
         self.max_frames_without_detection = 5  # Reduced from 10 for faster timeout
         
-        # STABILITY FIX: Add detection confidence tracking
+        # Detection history and confidence tracking
         self.recent_detections = []
-        self.detection_history_length = 5
+        self.detection_history_length = 7  # Increased for better stability
         
-        # SPEED OPTIMIZATION: Reduced movement smoothing
+        # ACCURACY IMPROVEMENT: More conservative movement parameters
         self.movement_history = []
-        self.history_length = 2       # Reduced from 3 for faster response
+        self.history_length = 4       # Increased for smoother movement
         
-        # STABILITY FIX: Disable frame skipping to prevent false detection loss
+        # ACCURACY IMPROVEMENT: Process every frame for maximum accuracy
         self.frame_skip_count = 0
-        self.process_every_n_frames = 1  # Process every frame for stability
+        self.process_every_n_frames = 1  # Process every frame for accuracy
         
     def start_tracking(self):
         """Start the human tracking loop."""
@@ -186,28 +249,32 @@ class HumanTracker:
                     # Calculate control commands FIRST for speed
                     self._track_human(center_x, human_height)
                     
-                    # SPEED OPTIMIZATION: Simplified visualization
-                    # Main bounding box only
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    # ACCURACY IMPROVEMENT: Enhanced visualization with detection quality
+                    # Main bounding box with confidence color coding
+                    confidence = max(0, min(1, (human_height - 40) / 160))  # Rough confidence based on size
+                    color_intensity = int(255 * confidence)
+                    bbox_color = (0, color_intensity, 255 - color_intensity)  # Green for good, red for poor
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), bbox_color, 2)
                     
-                    # Center point
+                    # Center point with size indicator
                     cv2.circle(frame, (center_x, center_y), 5, (0, 0, 255), -1)
+                    cv2.circle(frame, (center_x, center_y), int(confidence * 15 + 5), bbox_color, 2)
                     
                     # Target center line
                     cv2.line(frame, (self.target_x, 0), (self.target_x, self.frame_height), (255, 0, 0), 1)
                     
-                    # SPEED OPTIMIZATION: Minimal status text
+                    # ACCURACY IMPROVEMENT: Detailed status information
                     x_error = center_x - self.target_x
-                    cv2.putText(frame, f"TRACKING: X={x_error:+.0f}", (10, 30), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                    # SPEED OPTIMIZATION: Minimal status text only
                     distance_error = self.target_distance - human_height
                     direction = "→" if x_error > 0 else "←" if x_error < 0 else "●"
-                    cv2.putText(frame, f"FAST TRACK {direction}: X={x_error:+.0f} D={distance_error:+.0f}", 
-                               (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    
+                    cv2.putText(frame, f"TRACKING {direction}: X={x_error:+.0f} D={distance_error:+.0f}", 
+                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    cv2.putText(frame, f"Size: {w}x{h} Conf: {confidence:.2f}", 
+                               (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, bbox_color, 2)
                     
                 else:
-                    # STABILITY FIX: Track no detection and check if it's really lost
+                    # ACCURACY IMPROVEMENT: More conservative detection loss handling
                     self.recent_detections.append(False)
                     if len(self.recent_detections) > self.detection_history_length:
                         self.recent_detections.pop(0)
@@ -215,13 +282,13 @@ class HumanTracker:
                     # Only trigger search if consistently losing detection
                     recent_detection_rate = sum(self.recent_detections) / len(self.recent_detections)
                     
-                    if recent_detection_rate < 0.3:  # Less than 30% detection in recent frames
+                    if recent_detection_rate < 0.2:  # Less than 20% detection in recent frames
                         # Actually lost, use improved search behavior
                         self._handle_no_detection()
                     else:
                         # Probably just a brief blip, keep last movement briefly then stop
-                        if self.frames_since_detection < 2:
-                            # Keep current movement for 1-2 frames
+                        if self.frames_since_detection < 3:  # Increased patience
+                            # Keep current movement for a few more frames
                             pass  # Don't change motor commands
                         else:
                             # Stop after brief continuation
@@ -230,7 +297,7 @@ class HumanTracker:
                     with self.lock:
                         self.last_human_center = None
                     
-                    # SPEED OPTIMIZATION: Minimal search indicator
+                    # ACCURACY IMPROVEMENT: Better search indicator
                     detection_pct = int(recent_detection_rate * 100)
                     cv2.putText(frame, f"DETECTION: {detection_pct}% ({self.frames_since_detection})", 
                                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)

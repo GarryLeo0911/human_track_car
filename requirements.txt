@@ -7,3 +7,6 @@ RPi.GPIO
 adafruit-circuitpython-pca9685
 adafruit-circuitpython-motor
 pygame
+ultralytics
+torch
+torchvision
