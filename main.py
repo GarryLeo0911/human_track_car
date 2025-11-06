@@ -1,6 +1,6 @@
 """
 Automatic Human Tracking Car
-Main entry point for the human tracking car application with YOLO and ultrasonic support.
+Main entry point for the human tracking car application with pure visual tracking.
 """
 
 from src.web.app import create_app
@@ -22,24 +22,16 @@ def main():
     """Main function to start the human tracking car system."""
     
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Human Tracking Car with YOLO and Ultrasonic Support')
-    parser.add_argument('--no-ultrasonic', action='store_true', 
-                       help='Disable ultrasonic sensor (vision-only mode)')
-    parser.add_argument('--ultrasonic-pins', nargs=2, type=int, default=[27, 22],
-                       help='Ultrasonic sensor GPIO pins [trigger echo] (default: 27 22)')
+    parser = argparse.ArgumentParser(description='Human Tracking Car with Pure Visual Tracking')
     parser.add_argument('--detector', choices=['yolo', 'hog', 'auto'], default='auto',
                        help='Detection method: yolo (YOLOv8n), hog (traditional), auto (try YOLO first)')
     args = parser.parse_args()
     
-    use_ultrasonic = not args.no_ultrasonic
     detector_choice = args.detector
     
     logger.info("Starting Human Tracking Car System...")
     logger.info(f"Detection method: {detector_choice}")
-    if use_ultrasonic:
-        logger.info("Enhanced mode: Vision + Ultrasonic sensor")
-    else:
-        logger.info("Standard mode: Vision only")
+    logger.info("Mode: Pure Visual Tracking (no ultrasonic sensor)")
     
     try:
         # Initialize motor controller first (fast)
@@ -64,18 +56,13 @@ def main():
                 
                 logger.info("Initializing human tracker...")
                 
-                # Determine which tracker to use
+                # Determine which tracker to use (pure visual mode)
                 if detector_choice == 'yolo':
                     # Force YOLO
                     try:
                         from src.tracking.yolo_human_tracker import YOLOHumanTracker
-                        if use_ultrasonic:
-                            # TODO: Create YOLO + Ultrasonic tracker
-                            logger.warning("YOLO + Ultrasonic not yet implemented, using YOLO only")
-                            human_tracker = YOLOHumanTracker(camera_manager, motor_controller)
-                        else:
-                            human_tracker = YOLOHumanTracker(camera_manager, motor_controller)
-                        logger.info("YOLOv8n human tracker ready")
+                        human_tracker = YOLOHumanTracker(camera_manager, motor_controller)
+                        logger.info("YOLOv8n human tracker ready (pure visual)")
                     except Exception as e:
                         logger.error(f"Failed to initialize YOLO tracker: {e}")
                         raise
@@ -83,34 +70,20 @@ def main():
                 elif detector_choice == 'hog':
                     # Force HOG
                     from src.tracking.human_tracker import HumanTracker
-                    from src.tracking.ultrasonic_human_tracker import UltrasonicHumanTracker
-                    if use_ultrasonic:
-                        human_tracker = UltrasonicHumanTracker(camera_manager, motor_controller, use_ultrasonic=True)
-                        logger.info("HOG + Ultrasonic human tracker ready")
-                    else:
-                        human_tracker = HumanTracker(camera_manager, motor_controller)
-                        logger.info("HOG human tracker ready")
+                    human_tracker = HumanTracker(camera_manager, motor_controller)
+                    logger.info("HOG human tracker ready (pure visual)")
                         
                 else:  # auto
                     # Try YOLO first, fallback to HOG
                     try:
                         from src.tracking.yolo_human_tracker import YOLOHumanTracker
-                        if use_ultrasonic:
-                            logger.warning("YOLO + Ultrasonic not yet implemented, using YOLO only")
-                            human_tracker = YOLOHumanTracker(camera_manager, motor_controller)
-                        else:
-                            human_tracker = YOLOHumanTracker(camera_manager, motor_controller)
-                        logger.info("Auto-selected YOLOv8n human tracker")
+                        human_tracker = YOLOHumanTracker(camera_manager, motor_controller)
+                        logger.info("Auto-selected YOLOv8n human tracker (pure visual)")
                     except Exception as e:
                         logger.warning(f"YOLO not available ({e}), falling back to HOG")
                         from src.tracking.human_tracker import HumanTracker
-                        from src.tracking.ultrasonic_human_tracker import UltrasonicHumanTracker
-                        if use_ultrasonic:
-                            human_tracker = UltrasonicHumanTracker(camera_manager, motor_controller, use_ultrasonic=True)
-                            logger.info("Fallback: HOG + Ultrasonic human tracker ready")
-                        else:
-                            human_tracker = HumanTracker(camera_manager, motor_controller)
-                            logger.info("Fallback: HOG human tracker ready")
+                        human_tracker = HumanTracker(camera_manager, motor_controller)
+                        logger.info("Fallback: HOG human tracker ready (pure visual)")
                 
                 # Update app with real components
                 setattr(app, 'human_tracker', human_tracker)  # Safe attribute assignment
