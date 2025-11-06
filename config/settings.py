@@ -3,7 +3,7 @@
 # Camera settings
 CAMERA_RESOLUTION = (640, 480)
 CAMERA_FRAMERATE = 30
-USE_PI_CAMERA = True  # Set to False to use USB camera
+USE_PI_CAMERA = False  # Set to True to use Pi Camera, False for USB camera (safer for Ubuntu)
 
 # Detection settings
 DETECTION_CONFIDENCE_THRESHOLD = 0.5

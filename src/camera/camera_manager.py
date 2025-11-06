@@ -14,13 +14,31 @@ import base64
 # Try to import camera modules (Ubuntu vs Raspberry Pi OS compatibility)
 PI_CAMERA_AVAILABLE = False
 PICAMERA2_AVAILABLE = False
+LIBCAMERA_ERROR = None
 
 # Try picamera2 first (better Ubuntu support)
 try:
-    from picamera2 import Picamera2
-    PICAMERA2_AVAILABLE = True
-    CAMERA_LIB = 'picamera2'
-except ImportError:
+    # Test libcamera first to catch version issues
+    try:
+        import libcamera
+        # Test for required components
+        from libcamera import ControlType, Rectangle, Size
+        LIBCAMERA_VERSION_OK = True
+    except (ImportError, AttributeError) as e:
+        LIBCAMERA_ERROR = str(e)
+        LIBCAMERA_VERSION_OK = False
+        logging.warning(f"libcamera compatibility issue: {e}")
+    
+    if LIBCAMERA_VERSION_OK:
+        from picamera2 import Picamera2
+        PICAMERA2_AVAILABLE = True
+        CAMERA_LIB = 'picamera2'
+    else:
+        logging.warning("libcamera version incompatible with picamera2, skipping")
+        CAMERA_LIB = 'opencv'
+        
+except ImportError as e:
+    logging.warning(f"picamera2 import failed: {e}")
     # Fallback to original picamera
     try:
         from picamera import PiCamera
@@ -31,7 +49,10 @@ except ImportError:
         CAMERA_LIB = 'opencv'
 
 if not (PI_CAMERA_AVAILABLE or PICAMERA2_AVAILABLE):
-    logging.warning(f"Pi Camera modules not available. Using OpenCV camera. Available: {CAMERA_LIB}")
+    msg = f"Pi Camera modules not available. Using OpenCV camera. Library: {CAMERA_LIB}"
+    if LIBCAMERA_ERROR:
+        msg += f" (libcamera error: {LIBCAMERA_ERROR})"
+    logging.warning(msg)
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +112,9 @@ class CameraManager:
     def _init_picamera2(self):
         """Initialize Raspberry Pi camera using picamera2 (Ubuntu compatible)."""
         try:
+            if not PICAMERA2_AVAILABLE:
+                raise Exception("picamera2 not available")
+                
             self.camera = Picamera2()
             
             # Configure camera for video capture
@@ -110,7 +134,11 @@ class CameraManager:
             
         except Exception as e:
             logger.error(f"Failed to initialize PiCamera2: {e}")
+            if LIBCAMERA_ERROR:
+                logger.error(f"libcamera compatibility issue: {LIBCAMERA_ERROR}")
+            logger.info("Falling back to USB camera")
             self.use_pi_camera = False
+            self.camera_lib = 'opencv'
             self._init_usb_camera()
             
     def _init_pi_camera(self):
