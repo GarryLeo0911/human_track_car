@@ -216,14 +216,16 @@ class FreenoveMotorController:
         """Move car forward."""
         duty = int(speed / 100.0 * self.speed_scale)
         self.current_turn = 0
-        self.set_motor_model(duty, duty, duty, duty)
-        logger.info(f"Moving forward at speed {speed}% (duty={duty})")
+        # REVERSED: Forward is now negative duty
+        self.set_motor_model(-duty, -duty, -duty, -duty)
+        logger.info(f"Moving forward at speed {speed}% (duty={-duty})")
         
     def move_backward(self, speed: float = 50):
         """Move car backward."""
         duty = int(speed / 100.0 * self.speed_scale)
         self.current_turn = 0
-        self.set_motor_model(-duty, -duty, -duty, -duty)
+        # REVERSED: Backward is now positive duty
+        self.set_motor_model(duty, duty, duty, duty)
         logger.info(f"Moving backward at speed {speed}% (duty={duty})")
         
     def turn_left(self, speed: float = 50):
@@ -231,7 +233,8 @@ class FreenoveMotorController:
         duty = int(speed / 100.0 * self.speed_scale)
         self.current_speed = 0
         self.current_turn = -speed
-        self.set_motor_model(-duty, -duty, duty, duty)
+        # REVERSED: Left is now right motors negative, left motors positive
+        self.set_motor_model(duty, duty, -duty, -duty)
         logger.info(f"Turning left at speed {speed}% (duty={duty})")
         
     def turn_right(self, speed: float = 50):
@@ -239,7 +242,8 @@ class FreenoveMotorController:
         duty = int(speed / 100.0 * self.speed_scale)
         self.current_speed = 0
         self.current_turn = speed
-        self.set_motor_model(duty, duty, -duty, -duty)
+        # REVERSED: Right is now left motors negative, right motors positive
+        self.set_motor_model(-duty, -duty, duty, duty)
         logger.info(f"Turning right at speed {speed}% (duty={duty})")
         
     def move_with_turn(self, forward_speed: float, turn_speed: float):
@@ -254,9 +258,10 @@ class FreenoveMotorController:
         forward_speed = max(-100, min(100, forward_speed))
         turn_speed = max(-100, min(100, turn_speed))
         
-        # Calculate individual motor speeds
-        left_speed = forward_speed - turn_speed
-        right_speed = forward_speed + turn_speed
+        # Calculate individual motor speeds (with reversed directions)
+        # REVERSED: left/right motor assignments are swapped for correct turning
+        left_speed = forward_speed + turn_speed  # was: forward_speed - turn_speed
+        right_speed = forward_speed - turn_speed  # was: forward_speed + turn_speed
         
         # Normalize to prevent values > 100
         max_speed = max(abs(left_speed), abs(right_speed))
@@ -264,9 +269,9 @@ class FreenoveMotorController:
             left_speed = (left_speed / max_speed) * 100
             right_speed = (right_speed / max_speed) * 100
         
-        # Convert to duty cycles
-        left_duty = int(left_speed / 100.0 * self.speed_scale)
-        right_duty = int(right_speed / 100.0 * self.speed_scale)
+        # Convert to duty cycles (with reversed direction)
+        left_duty = int(-left_speed / 100.0 * self.speed_scale)  # REVERSED: negative
+        right_duty = int(-right_speed / 100.0 * self.speed_scale)  # REVERSED: negative
         
         self.current_speed = forward_speed
         self.current_turn = turn_speed
