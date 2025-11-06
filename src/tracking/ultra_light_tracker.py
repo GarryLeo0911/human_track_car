@@ -8,8 +8,9 @@ import numpy as np
 import logging
 import time
 from threading import Lock
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 from .enhanced_human_detector import HybridHumanDetector, EnhancedMotionDetector, EnhancedEdgeDetector
+from .enhanced_tracking_controller import EnhancedTrackingController, SmartTargetSelector
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +283,15 @@ class UltraLightHumanTracker:
         self.lock = Lock()
         self.last_human_center = None
         
-        # Simplified PID controllers
+        # Enhanced tracking controller (based on target_follow project)
+        self.enhanced_controller = EnhancedTrackingController(
+            frame_width=640, 
+            frame_height=480
+        )
+        self.smart_selector = SmartTargetSelector(max_history=10)
+        self.use_enhanced_control = True  # Flag to enable enhanced tracking
+        
+        # Legacy PID controllers (for fallback)
         self.pid_x = SimplePIDController(kp=0.4, ki=0.08, kd=0.15)
         self.pid_distance = SimplePIDController(kp=0.25, ki=0.03, kd=0.08)
         
@@ -334,41 +343,90 @@ class UltraLightHumanTracker:
                 detection_time = (time.time() - start_time) * 1000
                 
                 if human_detections:
-                    # Handle both old format (x,y,w,h) and new format (x,y,w,h,confidence)
-                    if len(human_detections[0]) == 5:
-                        # Enhanced detectors return confidence
-                        best_detection = max(human_detections, key=lambda box: box[4])  # Select by confidence
-                        x, y, w, h, confidence = best_detection[:5]
-                        logger.debug(f"Human detected with confidence: {confidence:.2f}")
+                    if self.use_enhanced_control:
+                        # Convert to enhanced format and use enhanced tracking controller
+                        enhanced_detections = self._convert_detections_to_enhanced_format(human_detections)
+                        control_result = self.enhanced_controller.update_target_tracking(enhanced_detections)
+                        
+                        # Extract control commands
+                        speed_command = control_result.get('speed', 0.0)
+                        turn_command = control_result.get('turn', 0.0)
+                        
+                        # Convert to motor controller format (scale appropriately)
+                        motor_speed = speed_command * 50  # Scale to motor range
+                        motor_turn = turn_command * 50    # Scale to motor range
+                        
+                        # Send control commands
+                        self.motor_controller.move_with_turn(motor_speed, motor_turn)
+                        
+                        # Update tracking state for compatibility
+                        with self.lock:
+                            target_x = control_result.get('target_x', self.frame_width // 2)
+                            target_y = control_result.get('target_y', self.frame_height // 2) 
+                            target_h = control_result.get('target_height', 0)
+                            self.last_human_center = (target_x, target_y, target_h)
+                        
+                        # Visualization with enhanced info
+                        self._draw_enhanced_visualization(frame, control_result, detection_time)
+                        
+                        self.frames_since_detection = 0
                     else:
-                        # Original detectors return just bounding box
-                        best_detection = max(human_detections, key=lambda box: box[2] * box[3])  # Select by area
+                        # Legacy tracking logic - safe detection handling
+                        def get_confidence(detection):
+                            return detection[4] if len(detection) > 4 else (detection[2] * detection[3])  # Use area if no confidence
+                        
+                        # Select best detection
+                        best_detection = max(human_detections, key=get_confidence)
                         x, y, w, h = best_detection[:4]
-                    
-                    # Calculate center point
-                    center_x = x + w // 2
-                    center_y = y + h // 2
-                    
-                    # Update tracking state
-                    with self.lock:
-                        self.last_human_center = (center_x, center_y, h)
-                    
-                    # Control vehicle movement
-                    self._track_human(center_x, h)
-                    
-                    # Visualization
-                    self._draw_visualization(frame, x, y, w, h, center_x, center_y, detection_time)
-                    
-                    self.frames_since_detection = 0
+                        
+                        if len(best_detection) > 4:
+                            confidence = best_detection[4]
+                            logger.debug(f"Human detected with confidence: {confidence:.2f}")
+                        
+                        # Calculate center point
+                        center_x = x + w // 2
+                        center_y = y + h // 2
+                        
+                        # Update tracking state
+                        with self.lock:
+                            self.last_human_center = (center_x, center_y, h)
+                        
+                        # Control vehicle movement
+                        self._track_human(center_x, h)
+                        
+                        # Visualization
+                        self._draw_visualization(frame, x, y, w, h, center_x, center_y, detection_time)
+                        
+                        self.frames_since_detection = 0
                 else:
                     # No human detected
-                    self._handle_no_detection()
+                    if self.use_enhanced_control:
+                        # Use enhanced controller for lost target handling
+                        control_result = self.enhanced_controller.update_target_tracking([])
+                        
+                        # Extract control commands
+                        speed_command = control_result.get('speed', 0.0)
+                        turn_command = control_result.get('turn', 0.0)
+                        
+                        # Convert to motor controller format
+                        motor_speed = speed_command * 50
+                        motor_turn = turn_command * 50
+                        
+                        # Send control commands
+                        self.motor_controller.move_with_turn(motor_speed, motor_turn)
+                        
+                        # Status display
+                        status = control_result.get('tracking_status', 'lost')
+                        cv2.putText(frame, f"{self.detector_name} - Status: {status} {detection_time:.1f}ms", 
+                                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    else:
+                        # Legacy no detection handling
+                        self._handle_no_detection()
+                        cv2.putText(frame, f"{self.detector_name} Searching... {detection_time:.1f}ms", 
+                                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    
                     with self.lock:
                         self.last_human_center = None
-                    
-                    # Status display
-                    cv2.putText(frame, f"{self.detector_name} Searching... {detection_time:.1f}ms", 
-                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                 
                 # Update camera with processed frame
                 self.camera_manager.set_processed_frame(frame)
@@ -378,6 +436,21 @@ class UltraLightHumanTracker:
                 
             except Exception as e:
                 logger.error(f"Ultra-lightweight tracking loop error: {e}")
+    
+    def _convert_detections_to_enhanced_format(self, detections: List[Tuple]) -> List[Tuple[int, int, int, int, float]]:
+        """Convert detections to enhanced format with confidence"""
+        enhanced_detections = []
+        for detection in detections:
+            if len(detection) == 5:
+                # Already has confidence
+                enhanced_detections.append(detection)
+            elif len(detection) == 4:
+                # Add default confidence
+                x, y, w, h = detection
+                enhanced_detections.append((x, y, w, h, 1.0))
+            else:
+                logger.warning(f"Unexpected detection format: {detection}")
+        return enhanced_detections
     
     def _track_human(self, center_x: int, human_height: int):
         """Control vehicle to track human"""
@@ -455,6 +528,50 @@ class UltraLightHumanTracker:
         cv2.putText(frame, f"Detection Time: {detection_time:.1f}ms | Size: {w}x{h}", 
                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
     
+    def _draw_enhanced_visualization(self, frame, control_result: Dict, detection_time: float):
+        """Draw enhanced visualization with tracking controller info"""
+        # Get target information
+        target_x = control_result.get('target_x', self.frame_width // 2)
+        target_y = control_result.get('target_y', self.frame_height // 2)
+        target_w = control_result.get('target_width', 0)
+        target_h = control_result.get('target_height', 0)
+        confidence = control_result.get('confidence', 0.0)
+        distance_estimate = control_result.get('distance_estimate', 0.0)
+        tracking_status = control_result.get('tracking_status', 'unknown')
+        
+        # Draw bounding box
+        if target_w > 0 and target_h > 0:
+            x = target_x - target_w // 2
+            y = target_y - target_h // 2
+            cv2.rectangle(frame, (x, y), (x + target_w, y + target_h), (0, 255, 0), 2)
+            
+            # Center point
+            cv2.circle(frame, (target_x, target_y), 5, (0, 255, 0), -1)
+        
+        # Target line
+        cv2.line(frame, (self.target_x, 0), (self.target_x, self.frame_height), (255, 0, 0), 2)
+        
+        # Enhanced status information
+        speed = control_result.get('speed', 0.0)
+        turn = control_result.get('turn', 0.0)
+        
+        # Color based on tracking status
+        if tracking_status == 'active':
+            color = (0, 255, 0)  # Green
+        elif 'lost_recent' in tracking_status:
+            color = (0, 255, 255)  # Yellow
+        else:
+            color = (0, 0, 255)  # Red
+        
+        cv2.putText(frame, f"{self.detector_name} - Enhanced Tracking", 
+                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+        cv2.putText(frame, f"Status: {tracking_status} | Confidence: {confidence:.2f}", 
+                   (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+        cv2.putText(frame, f"Speed: {speed:.2f} | Turn: {turn:.2f} | Dist: {distance_estimate:.1f}m", 
+                   (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(frame, f"Detection Time: {detection_time:.1f}ms", 
+                   (10, 105), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    
     def stop_tracking(self):
         """Stop human tracking"""
         logger.info("Stopping ultra-lightweight human tracking...")
@@ -464,13 +581,45 @@ class UltraLightHumanTracker:
     def get_tracking_status(self) -> dict:
         """Get current tracking status"""
         with self.lock:
-            return {
-                'tracking': self.tracking,
-                'detector_type': self.detector_name,
-                'last_human_center': self.last_human_center,
-                'target_center': (self.target_x, self.frame_height // 2),
-                'frame_size': (self.frame_width, self.frame_height)
-            }
+            if self.use_enhanced_control:
+                # Get enhanced tracking info
+                enhanced_info = self.enhanced_controller.get_tracking_info()
+                return {
+                    'tracking': self.tracking,
+                    'detector_type': self.detector_name,
+                    'enhanced_control': True,
+                    'last_human_center': self.last_human_center,
+                    'target_center': (self.target_x, self.frame_height // 2),
+                    'frame_size': (self.frame_width, self.frame_height),
+                    'enhanced_info': enhanced_info
+                }
+            else:
+                # Legacy status
+                return {
+                    'tracking': self.tracking,
+                    'detector_type': self.detector_name,
+                    'enhanced_control': False,
+                    'last_human_center': self.last_human_center,
+                    'target_center': (self.target_x, self.frame_height // 2),
+                    'frame_size': (self.frame_width, self.frame_height)
+                }
+    
+    def enable_enhanced_control(self, enabled: bool = True):
+        """Enable or disable enhanced tracking control"""
+        with self.lock:
+            self.use_enhanced_control = enabled
+            if enabled:
+                self.enhanced_controller.reset_tracking()
+                logger.info("Enhanced tracking control enabled")
+            else:
+                logger.info("Enhanced tracking control disabled - using legacy control")
+    
+    def configure_enhanced_tracking(self, **kwargs):
+        """Configure enhanced tracking parameters"""
+        if self.use_enhanced_control:
+            self.enhanced_controller.configure_parameters(**kwargs)
+        else:
+            logger.warning("Enhanced tracking is disabled")
 
 
 class SimplePIDController:
