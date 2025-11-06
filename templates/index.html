@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Human Tracking Car Control</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-robot"></i> Human Tracking Car</h1>
+            <div class="status-indicator" id="connectionStatus">
+                <i class="fas fa-circle"></i> Connected
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Video Stream Section -->
+            <div class="video-section">
+                <div class="video-container">
+                    <img id="videoStream" src="{{ url_for('video_feed') }}" alt="Video Stream">
+                    <div class="video-overlay">
+                        <div class="crosshair"></div>
+                        <div class="detection-info" id="detectionInfo">
+                            No human detected
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control Panel -->
+            <div class="control-panel">
+                <!-- Tracking Controls -->
+                <div class="control-section">
+                    <h3><i class="fas fa-search"></i> Tracking Control</h3>
+                    <div class="button-group">
+                        <button id="startTrackingBtn" class="btn btn-success">
+                            <i class="fas fa-play"></i> Start Tracking
+                        </button>
+                        <button id="stopTrackingBtn" class="btn btn-danger">
+                            <i class="fas fa-stop"></i> Stop Tracking
+                        </button>
+                    </div>
+                    <div class="tracking-status" id="trackingStatus">
+                        <span class="status-text">Tracking: <span id="trackingState">Stopped</span></span>
+                    </div>
+                </div>
+
+                <!-- Manual Control -->
+                <div class="control-section">
+                    <h3><i class="fas fa-gamepad"></i> Manual Control</h3>
+                    <div class="manual-controls">
+                        <div class="direction-pad">
+                            <button class="btn btn-secondary direction-btn" data-action="forward">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <div class="middle-row">
+                                <button class="btn btn-secondary direction-btn" data-action="left">
+                                    <i class="fas fa-arrow-left"></i>
+                                </button>
+                                <button class="btn btn-secondary direction-btn" data-action="stop">
+                                    <i class="fas fa-stop"></i>
+                                </button>
+                                <button class="btn btn-secondary direction-btn" data-action="right">
+                                    <i class="fas fa-arrow-right"></i>
+                                </button>
+                            </div>
+                            <button class="btn btn-secondary direction-btn" data-action="backward">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                        </div>
+                        <div class="speed-control">
+                            <label for="speedSlider">Speed: <span id="speedValue">50</span>%</label>
+                            <input type="range" id="speedSlider" min="0" max="100" value="50">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Status -->
+                <div class="control-section">
+                    <h3><i class="fas fa-info-circle"></i> System Status</h3>
+                    <div class="status-grid">
+                        <div class="status-item">
+                            <label>Camera:</label>
+                            <span id="cameraStatus">Unknown</span>
+                        </div>
+                        <div class="status-item">
+                            <label>Motors:</label>
+                            <span id="motorStatus">Unknown</span>
+                        </div>
+                        <div class="status-item">
+                            <label>Frame Rate:</label>
+                            <span id="frameRate">Unknown</span>
+                        </div>
+                        <div class="status-item">
+                            <label>Detection:</label>
+                            <span id="detectionStatus">Unknown</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="control-section">
+                    <h3><i class="fas fa-cog"></i> Settings</h3>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label for="targetDistance">Target Distance:</label>
+                            <input type="number" id="targetDistance" min="50" max="300" value="150">
+                        </div>
+                        <div class="setting-item">
+                            <label for="pidKp">PID Kp:</label>
+                            <input type="number" id="pidKp" step="0.1" min="0" max="2" value="0.5">
+                        </div>
+                        <div class="setting-item">
+                            <label for="pidKi">PID Ki:</label>
+                            <input type="number" id="pidKi" step="0.01" min="0" max="1" value="0.1">
+                        </div>
+                        <div class="setting-item">
+                            <label for="pidKd">PID Kd:</label>
+                            <input type="number" id="pidKd" step="0.01" min="0" max="1" value="0.2">
+                        </div>
+                    </div>
+                    <button id="updateSettingsBtn" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Update Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

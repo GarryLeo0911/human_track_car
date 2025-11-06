@@ -1,0 +1,9 @@
+flask
+opencv-python
+numpy
+imutils
+picamera
+RPi.GPIO
+adafruit-circuitpython-pca9685
+adafruit-circuitpython-motor
+pygame
