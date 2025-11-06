@@ -31,6 +31,12 @@ MAX_SPEED = 35  # Further reduced from 50 for ultra-gentle movement
 MAX_TURN_SPEED = 25  # Further reduced from 35 for ultra-gentle turning
 MOTOR_DEADZONE = 5  # Minimum speed to overcome motor friction
 
+# Step-by-step turning settings for ultra-smooth movement
+STEP_TURN_ENABLED = True
+TURN_STEP_DURATION = 0.3  # Seconds per turn step
+TURN_PAUSE_DURATION = 0.2  # Pause between steps to reassess
+TURN_STEP_SPEED_FACTOR = 0.4  # Fraction of max speed for step turns
+
 # Web interface settings
 WEB_HOST = '0.0.0.0'
 WEB_PORT = 5000

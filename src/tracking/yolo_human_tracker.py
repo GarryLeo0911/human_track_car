@@ -259,6 +259,16 @@ class YOLOHumanTracker:
         self.movement_history = []
         self.history_length = 7       # Increased from 5 to 7 for maximum smoothing
         
+        # Step-by-step turning configuration for ultra-smooth movement
+        self.step_turn_enabled = True
+        self.turn_step_angle = 15  # Degrees per step (small discrete turns)
+        self.turn_step_duration = 0.3  # Seconds per turn step
+        self.turn_pause_duration = 0.2  # Pause between steps to reassess
+        self.last_turn_step_time = 0
+        self.is_in_turn_step = False
+        self.current_turn_direction = 0  # -1 for left, 1 for right, 0 for none
+        self.accumulated_turn_error = 0  # Track how much we still need to turn
+        
         # Performance tracking
         self.detection_times = []
         self.max_time_samples = 30
@@ -474,8 +484,15 @@ class YOLOHumanTracker:
             if abs(distance_error) < distance_deadzone:
                 forward_speed = 0
             
-            # Movement smoothing
-            current_movement = (forward_speed, turn_speed)
+            # STEP-BY-STEP TURNING LOGIC for ultra-smooth movement
+            current_time = time.time()
+            
+            if self.step_turn_enabled and turn_speed != 0:
+                # Handle step-by-step turning
+                turn_speed = self._handle_step_turning(turn_speed, x_error, current_time)
+            
+            # Movement smoothing for forward movement only (turning is now stepped)
+            current_movement = (forward_speed, 0 if self.step_turn_enabled else turn_speed)
             self.movement_history.append(current_movement)
             if len(self.movement_history) > self.history_length:
                 self.movement_history.pop(0)
@@ -513,6 +530,91 @@ class YOLOHumanTracker:
             
         except Exception as e:
             logger.error(f"Error in YOLO tracking control: {e}")
+    
+    def _handle_step_turning(self, desired_turn_speed: float, x_error: int, current_time: float) -> float:
+        """
+        Handle step-by-step turning instead of continuous turning.
+        
+        Args:
+            desired_turn_speed: The calculated turn speed from PID
+            x_error: Current horizontal error in pixels
+            current_time: Current timestamp
+            
+        Returns:
+            Actual turn speed to apply (0 during pauses, stepped during turns)
+        """
+        # Determine desired turn direction
+        if desired_turn_speed > 0:
+            desired_direction = 1  # Right
+        elif desired_turn_speed < 0:
+            desired_direction = -1  # Left
+        else:
+            desired_direction = 0  # No turn needed
+        
+        # If we're currently in a turn step
+        if self.is_in_turn_step:
+            # Check if current step duration is complete
+            if current_time - self.last_turn_step_time >= self.turn_step_duration:
+                # Stop turning and start pause
+                self.is_in_turn_step = False
+                self.last_turn_step_time = current_time
+                logger.debug(f"STEP_TURN: Completed step, starting pause")
+                return 0
+            else:
+                # Continue current turn step
+                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.4)  # Gentle step speed
+                logger.debug(f"STEP_TURN: Continuing step, speed={turn_speed}")
+                return turn_speed
+        
+        # If we're in a pause between steps
+        elif self.current_turn_direction != 0:
+            # Check if pause duration is complete
+            if current_time - self.last_turn_step_time >= self.turn_pause_duration:
+                # Decide if we need another step
+                if abs(x_error) > 60:  # Still need to turn (outside deadzone)
+                    if desired_direction == self.current_turn_direction:
+                        # Continue in same direction
+                        self.is_in_turn_step = True
+                        self.last_turn_step_time = current_time
+                        turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.4)
+                        logger.debug(f"STEP_TURN: Starting new step, same direction, speed={turn_speed}")
+                        return turn_speed
+                    else:
+                        # Change direction or stop
+                        self.current_turn_direction = desired_direction
+                        if desired_direction != 0:
+                            self.is_in_turn_step = True
+                            self.last_turn_step_time = current_time
+                            turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.4)
+                            logger.debug(f"STEP_TURN: Starting new step, new direction, speed={turn_speed}")
+                            return turn_speed
+                        else:
+                            # No more turning needed
+                            self.current_turn_direction = 0
+                            logger.debug("STEP_TURN: Centered, stopping")
+                            return 0
+                else:
+                    # Close enough to center, stop turning
+                    self.current_turn_direction = 0
+                    logger.debug("STEP_TURN: Within deadzone, stopping")
+                    return 0
+            else:
+                # Still in pause
+                logger.debug("STEP_TURN: In pause between steps")
+                return 0
+        
+        # Not currently turning, check if we need to start
+        else:
+            if desired_direction != 0 and abs(x_error) > 60:  # Need to start turning
+                self.current_turn_direction = desired_direction
+                self.is_in_turn_step = True
+                self.last_turn_step_time = current_time
+                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.4)
+                logger.debug(f"STEP_TURN: Starting first step, direction={desired_direction}, speed={turn_speed}")
+                return turn_speed
+            else:
+                # No turning needed
+                return 0
     
     def _handle_no_detection(self):
         """Handle case when no human is detected."""
