@@ -1,14 +1,16 @@
 """
 Automatic Human Tracking Car
-Main entry point for the human tracking car application.
+Main entry point for the human tracking car application with ultrasonic support.
 """
 
 from src.web.app import create_app
 from src.tracking.human_tracker import HumanTracker
+from src.tracking.ultrasonic_human_tracker import UltrasonicHumanTracker
 from src.control.freenove_motor_controller import FreenoveMotorController
 from src.camera.camera_manager import CameraManager
 import threading
 import logging
+import argparse
 
 # Configure logging
 logging.basicConfig(
@@ -20,7 +22,22 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Main function to start the human tracking car system."""
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Human Tracking Car with Ultrasonic Support')
+    parser.add_argument('--no-ultrasonic', action='store_true', 
+                       help='Disable ultrasonic sensor (vision-only mode)')
+    parser.add_argument('--ultrasonic-pins', nargs=2, type=int, default=[27, 22],
+                       help='Ultrasonic sensor GPIO pins [trigger echo] (default: 27 22)')
+    args = parser.parse_args()
+    
+    use_ultrasonic = not args.no_ultrasonic
+    
     logger.info("Starting Human Tracking Car System...")
+    if use_ultrasonic:
+        logger.info("Enhanced mode: Vision + Ultrasonic sensor")
+    else:
+        logger.info("Standard mode: Vision only")
     
     try:
         # Initialize motor controller first (fast)
@@ -44,13 +61,19 @@ def main():
                 logger.info("Camera manager ready")
                 
                 logger.info("Initializing human tracker...")
-                human_tracker = HumanTracker(camera_manager, motor_controller)
-                logger.info("Human tracker ready")
+                if use_ultrasonic:
+                    # Use enhanced tracker with ultrasonic support
+                    human_tracker = UltrasonicHumanTracker(camera_manager, motor_controller, use_ultrasonic=True)
+                    logger.info("Enhanced human tracker with ultrasonic support ready")
+                else:
+                    # Use standard vision-only tracker
+                    human_tracker = HumanTracker(camera_manager, motor_controller)
+                    logger.info("Standard human tracker ready")
                 
                 # Update app with real components
-                app.human_tracker = human_tracker
+                setattr(app, 'human_tracker', human_tracker)  # Safe attribute assignment
                 from src.camera.camera_manager import StreamingHandler
-                app.streaming_handler = StreamingHandler(camera_manager)
+                setattr(app, 'streaming_handler', StreamingHandler(camera_manager))  # Safe assignment
                 logger.info("All components initialized and connected to Flask app")
                 
             except Exception as e:

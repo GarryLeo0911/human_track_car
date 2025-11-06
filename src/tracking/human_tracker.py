@@ -52,12 +52,12 @@ class HumanDetector:
                 gray_resized = gray.copy()
                 scale = 1.0
             
-            # SPEED OPTIMIZATION: Faster detection parameters
+            # STABILITY FIX: More conservative detection parameters
             boxes, weights = self.hog.detectMultiScale(
                 gray_resized,
-                winStride=(8, 8),        # Increased from (4,4) for speed
-                padding=(8, 8),          # Reduced from (16,16) for speed
-                scale=1.05               # Increased from 1.02 for speed (fewer scales)
+                winStride=(6, 6),        # Compromise between (4,4) and (8,8)
+                padding=(12, 12),        # Compromise between (8,8) and (16,16)
+                scale=1.03               # Slightly smaller step for better detection
             )
             
             # Scale boxes back to original size
@@ -123,13 +123,17 @@ class HumanTracker:
         self.frames_since_detection = 0
         self.max_frames_without_detection = 5  # Reduced from 10 for faster timeout
         
+        # STABILITY FIX: Add detection confidence tracking
+        self.recent_detections = []
+        self.detection_history_length = 5
+        
         # SPEED OPTIMIZATION: Reduced movement smoothing
         self.movement_history = []
         self.history_length = 2       # Reduced from 3 for faster response
         
-        # SPEED OPTIMIZATION: Frame processing control
+        # STABILITY FIX: Disable frame skipping to prevent false detection loss
         self.frame_skip_count = 0
-        self.process_every_n_frames = 2  # Process every 2nd frame for speed
+        self.process_every_n_frames = 1  # Process every frame for stability
         
     def start_tracking(self):
         """Start the human tracking loop."""
@@ -143,6 +147,9 @@ class HumanTracker:
         self.frames_since_detection = 0
         self.last_valid_center = None
         
+        # STABILITY FIX: Reset detection tracking
+        self.recent_detections.clear()
+        
         while self.tracking:
             try:
                 # Get current frame
@@ -150,26 +157,19 @@ class HumanTracker:
                 if frame is None:
                     continue
                 
-                # SPEED OPTIMIZATION: Frame skipping for faster processing
-                self.frame_skip_count += 1
-                should_process = (self.frame_skip_count % self.process_every_n_frames == 0)
-                
                 # Update frame dimensions
                 self.frame_height, self.frame_width = frame.shape[:2]
                 self.target_x = self.frame_width // 2
                 
-                if should_process:
-                    # Detect humans only on processed frames
-                    human_boxes = self.detector.detect_humans(frame)
-                else:
-                    # Use last detection result for skipped frames
-                    human_boxes = getattr(self, '_last_detection', [])
+                # STABILITY FIX: Always process for reliable detection
+                human_boxes = self.detector.detect_humans(frame)
                 
                 if human_boxes:
-                    # Store detection for frame skipping
-                    if should_process:
-                        self._last_detection = human_boxes
-                        
+                    # STABILITY FIX: Track detection confidence
+                    self.recent_detections.append(True)
+                    if len(self.recent_detections) > self.detection_history_length:
+                        self.recent_detections.pop(0)
+                    
                     # Select the largest detection (closest person)
                     largest_box = max(human_boxes, key=lambda box: box[2] * box[3])
                     x, y, w, h = largest_box
@@ -207,13 +207,32 @@ class HumanTracker:
                                (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                     
                 else:
-                    # No human detected - use improved search behavior
-                    self._handle_no_detection()
+                    # STABILITY FIX: Track no detection and check if it's really lost
+                    self.recent_detections.append(False)
+                    if len(self.recent_detections) > self.detection_history_length:
+                        self.recent_detections.pop(0)
+                    
+                    # Only trigger search if consistently losing detection
+                    recent_detection_rate = sum(self.recent_detections) / len(self.recent_detections)
+                    
+                    if recent_detection_rate < 0.3:  # Less than 30% detection in recent frames
+                        # Actually lost, use improved search behavior
+                        self._handle_no_detection()
+                    else:
+                        # Probably just a brief blip, keep last movement briefly then stop
+                        if self.frames_since_detection < 2:
+                            # Keep current movement for 1-2 frames
+                            pass  # Don't change motor commands
+                        else:
+                            # Stop after brief continuation
+                            self.motor_controller.stop()
+                    
                     with self.lock:
                         self.last_human_center = None
                     
                     # SPEED OPTIMIZATION: Minimal search indicator
-                    cv2.putText(frame, f"SEARCHING... {self.frames_since_detection}/{self.max_frames_without_detection}", 
+                    detection_pct = int(recent_detection_rate * 100)
+                    cv2.putText(frame, f"DETECTION: {detection_pct}% ({self.frames_since_detection})", 
                                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                 
                 # SPEED OPTIMIZATION: Skip extra frame info drawing
@@ -301,33 +320,43 @@ class HumanTracker:
             logger.error(f"Error in human tracking control: {e}")
             
     def _handle_no_detection(self):
-        """Handle case when no human is detected."""
+        """Handle case when no human is detected - FIXED to prevent spinning."""
         self.frames_since_detection += 1
         
-        if self.frames_since_detection <= self.max_frames_without_detection:
-            # Try to recover by using last known position
+        # FIXED: Much more conservative search behavior
+        if self.frames_since_detection <= 2:
+            # For first 2 frames, just stop and wait - often temporary detection loss
+            self.motor_controller.stop()
+            logger.info("BRIEF LOSS: Stopping and waiting (probably temporary)")
+            
+        elif self.frames_since_detection <= self.max_frames_without_detection:
+            # Only search after multiple frames of loss, and very gently
             if self.last_valid_center is not None:
-                # Determine which direction to search based on last position
-                if self.last_valid_center < self.target_x - 50:
-                    # Human was on left, turn left gently to find them
-                    self.motor_controller.move_with_turn(0, -20)
-                    logger.info("SEARCHING: Gentle left turn to find human")
-                elif self.last_valid_center > self.target_x + 50:
-                    # Human was on right, turn right gently to find them
-                    self.motor_controller.move_with_turn(0, 20)
-                    logger.info("SEARCHING: Gentle right turn to find human")
+                # Much smaller search movements to prevent spinning
+                center_error = self.last_valid_center - self.target_x
+                
+                if abs(center_error) > 100:  # Only search if human was far from center
+                    if center_error < 0:
+                        # Human was significantly left, tiny left search
+                        self.motor_controller.move_with_turn(0, -10)  # Reduced from -20
+                        logger.info("SEARCHING: Tiny left search")
+                    else:
+                        # Human was significantly right, tiny right search  
+                        self.motor_controller.move_with_turn(0, 10)   # Reduced from 20
+                        logger.info("SEARCHING: Tiny right search")
                 else:
-                    # Human was center, stop and wait
+                    # Human was near center when lost, just stop
                     self.motor_controller.stop()
-                    logger.info("SEARCHING: Waiting at center")
+                    logger.info("SEARCHING: Was centered, stopping")
             else:
-                # No previous position, stop
+                # No previous position, definitely stop
                 self.motor_controller.stop()
+                logger.info("SEARCHING: No history, stopping")
         else:
             # Been too long without detection, stop completely
             self.motor_controller.stop()
             self.movement_history.clear()  # Reset movement history
-            logger.info("LOST: No human detected for too long, stopping")
+            logger.info("LOST: Stopping after extended search")
             
     def get_tracking_status(self) -> dict:
         """Get current tracking status."""
