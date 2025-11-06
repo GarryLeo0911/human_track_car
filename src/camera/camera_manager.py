@@ -11,14 +11,27 @@ import time
 from threading import Lock
 import base64
 
-# Try to import Raspberry Pi camera module
+# Try to import camera modules (Ubuntu vs Raspberry Pi OS compatibility)
+PI_CAMERA_AVAILABLE = False
+PICAMERA2_AVAILABLE = False
+
+# Try picamera2 first (better Ubuntu support)
 try:
-    from picamera import PiCamera
-    from picamera.array import PiRGBArray
-    PI_CAMERA_AVAILABLE = True
+    from picamera2 import Picamera2
+    PICAMERA2_AVAILABLE = True
+    CAMERA_LIB = 'picamera2'
 except ImportError:
-    PI_CAMERA_AVAILABLE = False
-    logging.warning("PiCamera module not available. Using OpenCV camera.")
+    # Fallback to original picamera
+    try:
+        from picamera import PiCamera
+        from picamera.array import PiRGBArray
+        PI_CAMERA_AVAILABLE = True
+        CAMERA_LIB = 'picamera'
+    except ImportError:
+        CAMERA_LIB = 'opencv'
+
+if not (PI_CAMERA_AVAILABLE or PICAMERA2_AVAILABLE):
+    logging.warning(f"Pi Camera modules not available. Using OpenCV camera. Available: {CAMERA_LIB}")
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +57,8 @@ class CameraManager:
         
         # Camera state
         self.camera_active = False
-        self.use_pi_camera = PI_CAMERA_AVAILABLE
+        self.use_pi_camera = PICAMERA2_AVAILABLE or PI_CAMERA_AVAILABLE
+        self.camera_lib = CAMERA_LIB
         
         # Initialize camera
         self._init_camera()
@@ -53,7 +67,10 @@ class CameraManager:
         """Initialize the camera system."""
         try:
             if self.use_pi_camera:
-                self._init_pi_camera()
+                if PICAMERA2_AVAILABLE:
+                    self._init_picamera2()
+                elif PI_CAMERA_AVAILABLE:
+                    self._init_pi_camera()
             else:
                 self._init_usb_camera()
                 
@@ -64,11 +81,37 @@ class CameraManager:
             )
             self.capture_thread.start()
             
-            logger.info(f"Camera initialized - Pi Camera: {self.use_pi_camera}")
+            logger.info(f"Camera initialized - Library: {self.camera_lib}")
             
         except Exception as e:
             logger.error(f"Failed to initialize camera: {e}")
             self.camera_active = False
+            
+            
+    def _init_picamera2(self):
+        """Initialize Raspberry Pi camera using picamera2 (Ubuntu compatible)."""
+        try:
+            self.camera = Picamera2()
+            
+            # Configure camera for video capture
+            config = self.camera.create_video_configuration(
+                main={"size": self.resolution, "format": "RGB888"}
+            )
+            self.camera.configure(config)
+            
+            # Start camera
+            self.camera.start()
+            
+            # Allow camera to warm up
+            time.sleep(2)
+            
+            self.camera_active = True
+            logger.info("PiCamera2 initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize PiCamera2: {e}")
+            self.use_pi_camera = False
+            self._init_usb_camera()
             
     def _init_pi_camera(self):
         """Initialize Raspberry Pi camera."""
@@ -126,7 +169,10 @@ class CameraManager:
         while self.camera_active:
             try:
                 if self.use_pi_camera:
-                    self._capture_pi_frame()
+                    if PICAMERA2_AVAILABLE:
+                        self._capture_picamera2_frame()
+                    elif PI_CAMERA_AVAILABLE:
+                        self._capture_pi_frame()
                 else:
                     self._capture_usb_frame()
                     
@@ -138,6 +184,20 @@ class CameraManager:
             except Exception as e:
                 logger.error(f"Error in capture loop: {e}")
                 time.sleep(0.1)
+                
+    def _capture_picamera2_frame(self):
+        """Capture frame from Pi camera using picamera2."""
+        try:
+            frame = self.camera.capture_array()
+            
+            # Convert RGB to BGR for OpenCV compatibility
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            
+            with self.lock:
+                self.current_frame = frame
+                
+        except Exception as e:
+            logger.error(f"Error capturing picamera2 frame: {e}")
                 
     def _capture_pi_frame(self):
         """Capture frame from Pi camera."""
@@ -277,7 +337,11 @@ class CameraManager:
         # Release camera
         try:
             if self.use_pi_camera and hasattr(self, 'camera'):
-                self.camera.close()
+                if PICAMERA2_AVAILABLE:
+                    self.camera.stop()
+                    self.camera.close()
+                elif PI_CAMERA_AVAILABLE:
+                    self.camera.close()
             elif hasattr(self, 'camera'):
                 self.camera.release()
         except Exception as e:

@@ -21,7 +21,7 @@ An automatic human tracking car based on the Freenove 4WD Smart Car Kit for Rasp
 
 ### Required Components
 - Freenove 4WD Smart Car Kit for Raspberry Pi (FNK0043)
-- Raspberry Pi 4 (recommended) or Raspberry Pi 3B+
+- Raspberry Pi 4/5 (recommended) running Raspberry Pi OS or Ubuntu
 - Pi Camera Module or USB Webcam
 - MicroSD Card (32GB+ recommended)
 - Power bank or battery pack
@@ -37,11 +37,36 @@ An automatic human tracking car based on the Freenove 4WD Smart Car Kit for Rasp
 - OpenCV 4.0+
 - Flask 2.0+
 - NumPy
-- Additional packages listed in `requirements.txt`
+- Additional packages listed in `requirements.txt` (Raspberry Pi OS) or `requirements-ubuntu.txt` (Ubuntu)
 
 ## Installation
 
-### 1. Setup Raspberry Pi
+### For Ubuntu on Raspberry Pi 5 (Recommended)
+
+Ubuntu provides better hardware support and performance on Raspberry Pi 5:
+
+```bash
+# Quick setup with automated script
+git clone <repository-url>
+cd human_track_car
+chmod +x setup-ubuntu.sh
+./setup-ubuntu.sh
+
+# Follow the prompts and reboot when asked
+sudo reboot
+
+# After reboot, activate environment and run
+source .venv/bin/activate
+python main.py
+```
+
+For detailed Ubuntu setup instructions, see [UBUNTU_SETUP.md](UBUNTU_SETUP.md).
+
+### For Raspberry Pi OS (Traditional)
+
+### For Raspberry Pi OS (Traditional)
+
+#### 1. Setup Raspberry Pi
 
 ```bash
 # Update system
@@ -55,12 +80,14 @@ sudo raspi-config
 # Navigate to Interface Options > Camera > Enable
 ```
 
-### 2. Clone and Setup Project
+#### 2. Clone and Setup Project
+
+#### 2. Clone and Setup Project
 
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd human_track
+cd human_track_car
 
 # Create virtual environment
 python3 -m venv .venv
@@ -70,21 +97,26 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Hardware Setup
+#### 3. Hardware Setup
+
+#### 3. Hardware Setup
 
 1. **Assemble the Freenove 4WD Smart Car** following the official guide
 2. **Connect the Pi Camera** or USB webcam
 3. **Verify motor connections** match the pin configuration in `src/control/motor_controller.py`
 4. **Test camera functionality**:
    ```bash
-   # For Pi Camera
+   # For Pi Camera (Raspberry Pi OS)
    raspistill -v -o test.jpg
+   
+   # For Pi Camera (Ubuntu with libcamera)
+   libcamera-still -v -o test.jpg
    
    # For USB Camera
    ls /dev/video*
    ```
 
-### 4. Configuration
+#### 4. Configuration
 
 Edit `config/settings.py` to match your hardware setup:
 

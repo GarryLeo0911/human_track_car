@@ -8,16 +8,37 @@ import time
 from threading import Lock
 
 # Try to import Raspberry Pi specific modules
+# Prefer gpiozero for Ubuntu compatibility
 try:
-    import RPi.GPIO as GPIO
+    # First try gpiozero (better Ubuntu support)
+    import gpiozero
+    GPIO_LIB = 'gpiozero'
+    GPIO_AVAILABLE = True
+except ImportError:
+    try:
+        # Fallback to RPi.GPIO
+        import RPi.GPIO as GPIO
+        GPIO_LIB = 'RPi.GPIO'
+        GPIO_AVAILABLE = True
+    except ImportError:
+        GPIO_LIB = None
+        GPIO_AVAILABLE = False
+
+# Try to import PCA9685 and motor control
+try:
     from adafruit_pca9685 import PCA9685
     from adafruit_motor import motor
     import board
     import busio
-    RPI_AVAILABLE = True
+    PCA9685_AVAILABLE = True
 except ImportError:
-    RPI_AVAILABLE = False
-    logging.warning("Raspberry Pi modules not available. Running in simulation mode.")
+    PCA9685_AVAILABLE = False
+
+# Overall hardware availability
+RPI_AVAILABLE = GPIO_AVAILABLE and PCA9685_AVAILABLE
+
+if not RPI_AVAILABLE:
+    logging.warning(f"Hardware modules not fully available. GPIO: {GPIO_AVAILABLE}, PCA9685: {PCA9685_AVAILABLE}. Running in simulation mode.")
 
 logger = logging.getLogger(__name__)
 

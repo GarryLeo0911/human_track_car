@@ -1,0 +1,35 @@
+# Human Tracking Car Requirements - Ubuntu/Raspberry Pi 5 Compatible
+
+# Core web framework
+flask>=2.0.0
+
+# Computer vision
+opencv-python>=4.5.0
+
+# Mathematical operations
+numpy>=1.21.0
+
+# Image processing utilities
+imutils>=0.5.4
+
+# GPIO and hardware control alternatives for Ubuntu
+# Use gpiozero instead of RPi.GPIO for better Ubuntu support
+gpiozero>=1.6.2
+
+# Alternative camera library that works better on Ubuntu
+# picamera2 is the newer library that works well with Ubuntu
+picamera2>=0.3.12
+
+# I2C and PWM control
+adafruit-circuitpython-pca9685>=3.4.0
+adafruit-circuitpython-motor>=3.4.0
+adafruit-blinka>=8.0.0
+
+# Optional: pygame for additional input handling
+pygame>=2.1.0
+
+# System utilities
+psutil>=5.8.0
+
+# Optional: For better camera control on Ubuntu
+v4l2-python3>=0.3.2
