@@ -8,10 +8,10 @@ import time
 import sys
 import os
 
-# Add src directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from control.freenove_motor_controller import FreenoveMotorController
+from src.control.freenove_motor_controller import FreenoveMotorController
 
 def test_motor_directions():
     """Test all motor directions to verify they work as expected."""

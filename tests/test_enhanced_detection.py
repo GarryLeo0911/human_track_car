@@ -8,6 +8,12 @@ import cv2
 import time
 import numpy as np
 import logging
+import sys
+import os
+
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.tracking.enhanced_human_detector import (
     HybridHumanDetector, 
     EnhancedMotionDetector, 

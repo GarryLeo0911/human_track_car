@@ -9,8 +9,8 @@ import sys
 import os
 import logging
 
-# Add src directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,7 +22,7 @@ def test_ultrasonic_integration():
     print("=" * 60)
     
     try:
-        from sensors.ultrasonic_sensor import UltrasonicSensor
+        from src.sensors.ultrasonic_sensor import UltrasonicSensor
         
         print("✓ Ultrasonic sensor module imported successfully")
         

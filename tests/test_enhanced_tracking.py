@@ -7,6 +7,12 @@ Demonstrates the improved tracking capabilities learned from target_follow proje
 import cv2
 import time
 import logging
+import sys
+import os
+
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.tracking.ultra_light_tracker import UltraLightHumanTracker
 from src.control.freenove_motor_controller import FreenoveMotorController
 
