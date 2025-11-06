@@ -178,9 +178,9 @@ class HumanTracker:
         self.target_human_percentage = 0.25  # Human should occupy 25% of frame height
         self.target_distance = int(self.frame_height * self.target_human_percentage)  # 120 pixels for 480p
         
-        # SPEED OPTIMIZED control parameters - REDUCED SPEED FOR SMOOTHER MOVEMENT
-        self.max_turn_speed = 40      # Reduced from 50 for smoother turning
-        self.max_forward_speed = 45   # Reduced from 50 for gentler movement
+        # SPEED OPTIMIZED control parameters - ULTRA GENTLE SPEED FOR SMOOTH MOVEMENT
+        self.max_turn_speed = 30      # Further reduced from 40 for ultra-gentle turning
+        self.max_forward_speed = 35   # Further reduced from 45 for ultra-gentle movement
         
         # Edge detection and compensation - IMPROVED
         self.edge_threshold = 100     # Increased from 80 for earlier edge detection
@@ -418,9 +418,9 @@ class HumanTracker:
                 else:
                     turn_speed = edge_turn_strength   # Turn right to center
             
-            # ENSURE STRONGER MINIMUM MOVEMENT to overcome motor resistance
-            min_turn_threshold = 25  # Increased from 15 for stronger turning force
-            min_forward_threshold = 18  # Increased from 12 for stronger forward force
+            # ENSURE GENTLER MINIMUM MOVEMENT for ultra-smooth operation
+            min_turn_threshold = 15  # Reduced from 25 for gentler minimum turning force
+            min_forward_threshold = 12  # Reduced from 18 for gentler minimum forward force
             
             if turn_speed != 0:
                 if 0 < abs(turn_speed) < min_turn_threshold:
@@ -500,8 +500,8 @@ class HumanTracker:
                 logger.debug(f"HOG_STEP_TURN: Completed step, starting pause")
                 return 0
             else:
-                # Continue current turn step with gentler speed for longer duration
-                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.4)  # Gentler speed (40%)
+                # Continue current turn step with ultra-gentle speed for longer duration
+                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.25)  # Ultra-gentle speed (25%)
                 logger.debug(f"HOG_STEP_TURN: Continuing step, speed={turn_speed}")
                 return turn_speed
         
@@ -512,10 +512,10 @@ class HumanTracker:
                 # Decide if we need another step
                 if abs(x_error) > 60:  # Still need to turn (outside deadzone)
                     if desired_direction == self.current_turn_direction:
-                        # Continue in same direction with gentler speed
+                        # Continue in same direction with ultra-gentle speed
                         self.is_in_turn_step = True
                         self.last_turn_step_time = current_time
-                        turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.4)
+                        turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.25)
                         logger.debug(f"HOG_STEP_TURN: Starting new step, same direction, speed={turn_speed}")
                         return turn_speed
                     else:
@@ -524,7 +524,7 @@ class HumanTracker:
                         if desired_direction != 0:
                             self.is_in_turn_step = True
                             self.last_turn_step_time = current_time
-                            turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.4)
+                            turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.25)
                             logger.debug(f"HOG_STEP_TURN: Starting new step, new direction, speed={turn_speed}")
                             return turn_speed
                         else:
@@ -548,7 +548,7 @@ class HumanTracker:
                 self.current_turn_direction = desired_direction
                 self.is_in_turn_step = True
                 self.last_turn_step_time = current_time
-                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.4)
+                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.25)
                 logger.debug(f"HOG_STEP_TURN: Starting first step, direction={desired_direction}, speed={turn_speed}")
                 return turn_speed
             else:
