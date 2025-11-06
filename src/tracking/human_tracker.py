@@ -177,6 +177,19 @@ class HumanTracker:
                     cv2.putText(frame, f"Dist Error: {distance_error}", (10, 150), 
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
                     
+                    # Add movement direction indicators
+                    cv2.putText(frame, f"Target Height: {self.target_distance}", (10, 180), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    if human_height > self.target_distance:
+                        cv2.putText(frame, "TOO CLOSE - BACKING UP", (10, 210), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    elif human_height < self.target_distance:
+                        cv2.putText(frame, "TOO FAR - MOVING FORWARD", (10, 210), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    else:
+                        cv2.putText(frame, "DISTANCE OK", (10, 210), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                    
                     # Draw all detections (not just the largest)
                     for i, (hx, hy, hw, hh) in enumerate(human_boxes):
                         if (hx, hy, hw, hh) != largest_box:
@@ -230,15 +243,15 @@ class HumanTracker:
             turn_output = self.pid_x.update(x_error)
             speed_output = self.pid_distance.update(distance_error)
             
-            # CORRECTED: Invert speed output to match reversed motor logic
-            # When human is too close (distance_error negative), we want to back away (negative speed)
-            # When human is too far (distance_error positive), we want to move forward (positive speed)
-            # This matches the reversed motor direction where negative = forward, positive = backward
-            forward_speed = max(-100, min(100, -speed_output))  # INVERTED speed_output
+            # CORRECTED LOGIC:
+            # distance_error > 0: human too far away → need positive forward_speed (move forward)
+            # distance_error < 0: human too close → need negative forward_speed (move backward)  
+            # speed_output has same sign as distance_error, so we use it directly
+            forward_speed = max(-100, min(100, speed_output))
             
-            # Turn direction should be inverted too - when human is right of center (positive x_error)
-            # we want to turn right (positive turn), but with reversed motor logic this needs adjustment
-            turn_speed = max(-100, min(100, -turn_output * 2))  # INVERTED turn_output
+            # For turning: x_error > 0 means human is right of center → turn right (positive)
+            # x_error < 0 means human is left of center → turn left (negative)
+            turn_speed = max(-100, min(100, turn_output * 2))
             
             # Apply deadzone to prevent jittery movements
             if abs(x_error) < 30:  # X deadzone

@@ -251,7 +251,7 @@ class FreenoveMotorController:
         Move car with combined forward/backward and turning motion.
         
         Args:
-            forward_speed: Forward speed (-100 to 100, negative = backward)
+            forward_speed: Forward speed (-100 to 100, positive = forward, negative = backward)
             turn_speed: Turn speed (-100 to 100, negative = left, positive = right)
         """
         # Clamp values
@@ -260,8 +260,8 @@ class FreenoveMotorController:
         
         # Calculate individual motor speeds
         # For turning: left motor slows down for right turn, right motor slows down for left turn
-        left_speed = forward_speed - turn_speed   # CORRECTED: was +
-        right_speed = forward_speed + turn_speed  # CORRECTED: was -
+        left_speed = forward_speed - turn_speed   
+        right_speed = forward_speed + turn_speed  
         
         # Normalize to prevent values > 100
         max_speed = max(abs(left_speed), abs(right_speed))
@@ -269,9 +269,9 @@ class FreenoveMotorController:
             left_speed = (left_speed / max_speed) * 100
             right_speed = (right_speed / max_speed) * 100
         
-        # Convert to duty cycles (with reversed direction for forward/backward)
-        left_duty = int(-left_speed / 100.0 * self.speed_scale)  # REVERSED: negative
-        right_duty = int(-right_speed / 100.0 * self.speed_scale)  # REVERSED: negative
+        # Convert to duty cycles (negative duty = forward, positive duty = backward)
+        left_duty = int(-left_speed / 100.0 * self.speed_scale)  
+        right_duty = int(-right_speed / 100.0 * self.speed_scale)  
         
         self.current_speed = forward_speed
         self.current_turn = turn_speed
