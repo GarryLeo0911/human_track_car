@@ -230,9 +230,15 @@ class HumanTracker:
             turn_output = self.pid_x.update(x_error)
             speed_output = self.pid_distance.update(distance_error)
             
-            # Normalize outputs
-            turn_speed = max(-100, min(100, turn_output * 2))
-            forward_speed = max(-100, min(100, speed_output))
+            # CORRECTED: Invert speed output to match reversed motor logic
+            # When human is too close (distance_error negative), we want to back away (negative speed)
+            # When human is too far (distance_error positive), we want to move forward (positive speed)
+            # This matches the reversed motor direction where negative = forward, positive = backward
+            forward_speed = max(-100, min(100, -speed_output))  # INVERTED speed_output
+            
+            # Turn direction should be inverted too - when human is right of center (positive x_error)
+            # we want to turn right (positive turn), but with reversed motor logic this needs adjustment
+            turn_speed = max(-100, min(100, -turn_output * 2))  # INVERTED turn_output
             
             # Apply deadzone to prevent jittery movements
             if abs(x_error) < 30:  # X deadzone
