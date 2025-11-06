@@ -216,25 +216,25 @@ class FreenoveMotorController:
         """Move car forward."""
         duty = int(speed / 100.0 * self.speed_scale)
         self.current_turn = 0
-        # CORRECTED: Forward should be positive duty (toward human)
-        self.set_motor_model(duty, duty, duty, duty)
-        logger.info(f"Moving forward at speed {speed}% (duty={duty})")
+        # FIXED: Forward should be negative duty (physical forward movement)
+        self.set_motor_model(-duty, -duty, -duty, -duty)
+        logger.info(f"Moving forward at speed {speed}% (duty={-duty})")
         
     def move_backward(self, speed: float = 50):
         """Move car backward."""
         duty = int(speed / 100.0 * self.speed_scale)
         self.current_turn = 0
-        # CORRECTED: Backward should be negative duty (away from human)
-        self.set_motor_model(-duty, -duty, -duty, -duty)
-        logger.info(f"Moving backward at speed {speed}% (duty={-duty})")
+        # FIXED: Backward should be positive duty (physical backward movement)
+        self.set_motor_model(duty, duty, duty, duty)
+        logger.info(f"Moving backward at speed {speed}% (duty={duty})")
         
     def turn_left(self, speed: float = 50):
         """Turn car left."""
         duty = int(speed / 100.0 * self.speed_scale)
         self.current_speed = 0
         self.current_turn = -speed
-        # CORRECTED: Left turn - left wheels backward, right wheels forward
-        self.set_motor_model(-duty, -duty, duty, duty)
+        # FIXED: Left turn - left wheels forward, right wheels backward (since we swapped forward/backward)
+        self.set_motor_model(duty, duty, -duty, -duty)
         logger.info(f"Turning left at speed {speed}% (duty={duty})")
         
     def turn_right(self, speed: float = 50):
@@ -242,8 +242,8 @@ class FreenoveMotorController:
         duty = int(speed / 100.0 * self.speed_scale)
         self.current_speed = 0
         self.current_turn = speed
-        # CORRECTED: Right turn - left wheels forward, right wheels backward  
-        self.set_motor_model(duty, duty, -duty, -duty)
+        # FIXED: Right turn - left wheels backward, right wheels forward (since we swapped forward/backward) 
+        self.set_motor_model(-duty, -duty, duty, duty)
         logger.info(f"Turning right at speed {speed}% (duty={duty})")
         
     def move_with_turn(self, forward_speed: float, turn_speed: float):
@@ -269,9 +269,9 @@ class FreenoveMotorController:
             left_speed = (left_speed / max_speed) * 100
             right_speed = (right_speed / max_speed) * 100
         
-        # Convert to duty cycles (CORRECTED: positive duty = forward, negative duty = backward)
-        left_duty = int(left_speed / 100.0 * self.speed_scale)  
-        right_duty = int(right_speed / 100.0 * self.speed_scale)  
+        # Convert to duty cycles (FIXED: negative duty = forward, positive duty = backward)
+        left_duty = int(-left_speed / 100.0 * self.speed_scale)  # Inverted due to direction fix
+        right_duty = int(-right_speed / 100.0 * self.speed_scale)  # Inverted due to direction fix  
         
         self.current_speed = forward_speed
         self.current_turn = turn_speed

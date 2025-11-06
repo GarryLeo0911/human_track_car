@@ -429,7 +429,6 @@ class HumanTracker:
             if forward_speed != 0:
                 if 0 < abs(forward_speed) < min_forward_threshold:
                     forward_speed = min_forward_threshold if forward_speed > 0 else -min_forward_threshold
-                forward_speed = 0
             
             # STEP-BY-STEP TURNING LOGIC for ultra-smooth movement with edge override
             current_time = time.time()
