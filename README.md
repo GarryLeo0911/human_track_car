@@ -64,18 +64,54 @@ For detailed Ubuntu setup instructions, see [UBUNTU_SETUP.md](UBUNTU_SETUP.md).
 
 ### For Raspberry Pi OS (Traditional)
 
+#### Quick Installation (Recommended)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd human_track_car
+
+# Run the automated installation script
+chmod +x install_raspberry_pi.sh
+./install_raspberry_pi.sh
+
+# Reboot after installation
+sudo reboot
+
+# After reboot, test OpenCV installation
+python3 -c "import cv2; print('OpenCV version:', cv2.__version__)"
+
+# Run the application
+python3 main.py
+```
+
+#### Manual Installation
+
+If the automated script doesn't work, follow these manual steps:
+
 #### 1. Setup Raspberry Pi
 
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
 
-# Install Python dependencies
-sudo apt install python3-pip python3-venv git
+# Install system dependencies for OpenCV
+sudo apt install -y python3-pip python3-dev python3-setuptools python3-venv \
+    build-essential cmake pkg-config libjpeg-dev libtiff5-dev libjasper-dev \
+    libpng-dev libavcodec-dev libavformat-dev libswscale-dev libv4l-dev \
+    libxvidcore-dev libx264-dev libgtk-3-dev libatlas-base-dev gfortran \
+    python3-numpy
 
-# Enable camera interface
-sudo raspi-config
-# Navigate to Interface Options > Camera > Enable
+# Install OpenCV via system package (recommended for Raspberry Pi)
+sudo apt install -y python3-opencv
+
+# Install Raspberry Pi specific packages
+sudo apt install -y python3-picamera2 python3-libcamera python3-rpi.gpio python3-gpiozero
+
+# Enable interfaces
+sudo raspi-config nonint do_camera 0  # Enable camera
+sudo raspi-config nonint do_i2c 0     # Enable I2C
+sudo raspi-config nonint do_spi 0     # Enable SPI
 ```
 
 #### 2. Clone and Setup Project
@@ -85,12 +121,12 @@ sudo raspi-config
 git clone <repository-url>
 cd human_track_car
 
-# Create virtual environment
+# Create virtual environment (optional)
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install Python packages
-pip install -r requirements.txt
+# Install Python packages (use Raspberry Pi specific requirements)
+pip install -r requirements-raspberry-pi.txt
 ```
 
 #### 3. Hardware Setup
