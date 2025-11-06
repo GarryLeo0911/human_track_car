@@ -16,9 +16,10 @@ imutils>=0.5.4
 # Use gpiozero instead of RPi.GPIO for better Ubuntu support
 gpiozero>=1.6.2
 
-# Alternative camera library that works better on Ubuntu
-# picamera2 is the newer library that works well with Ubuntu
-picamera2>=0.3.12
+# Camera library - NOTE: picamera2 should be installed via system packages
+# on Ubuntu, but we include it here as fallback
+# Install with: sudo apt install python3-picamera2
+# picamera2>=0.3.12
 
 # I2C and PWM control
 adafruit-circuitpython-pca9685>=3.4.0

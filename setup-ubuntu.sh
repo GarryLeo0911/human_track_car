@@ -111,7 +111,21 @@ elif [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
 else
     echo "⚠️  No requirements file found. Installing basic packages..."
-    pip install flask opencv-python numpy gpiozero picamera2 adafruit-circuitpython-pca9685
+    pip install flask opencv-python numpy gpiozero adafruit-circuitpython-pca9685
+fi
+
+# Install picamera2 via system package (recommended for Ubuntu)
+echo "📷 Installing picamera2 via system package..."
+sudo apt install -y python3-picamera2
+
+# Make sure the virtual environment can access system packages
+echo "🔗 Configuring virtual environment for system packages..."
+# Add system packages to virtual environment
+SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+SYSTEM_PACKAGES="/usr/lib/python3/dist-packages"
+if [ ! -f "$SITE_PACKAGES/system_packages.pth" ]; then
+    echo "$SYSTEM_PACKAGES" > "$SITE_PACKAGES/system_packages.pth"
+    echo "✅ System packages linked to virtual environment"
 fi
 
 # Test hardware
@@ -143,19 +157,66 @@ except Exception as e:
 " 2>/dev/null || echo "⚠️  GPIO test failed"
 
 # Test camera libraries
+echo "Testing Python camera libraries..."
 python3 -c "
+import sys
+import os
+
+# Test libcamera availability
+try:
+    import libcamera
+    print('✅ libcamera available')
+except ImportError as e:
+    print(f'⚠️  libcamera not available: {e}')
+
+# Test picamera2 availability
 try:
     from picamera2 import Picamera2
     print('✅ picamera2 available')
-except ImportError:
-    print('⚠️  picamera2 not available')
+    
+    # Try to create a camera instance (don't start it)
+    try:
+        cam = Picamera2()
+        print('✅ picamera2 can create camera instance')
+        cam.close()
+    except Exception as e:
+        print(f'⚠️  picamera2 camera creation failed: {e}')
+        
+except ImportError as e:
+    print(f'⚠️  picamera2 not available: {e}')
+    print('   Try: sudo apt install python3-picamera2')
 
+# Test OpenCV
 try:
     import cv2
     print('✅ OpenCV available')
-except ImportError:
-    print('⚠️  OpenCV not available')
+except ImportError as e:
+    print(f'⚠️  OpenCV not available: {e}')
+
+# Test if we can detect any cameras
+try:
+    import cv2
+    for i in range(3):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            print(f'✅ USB Camera {i} detected')
+            cap.release()
+            break
+    else:
+        print('⚠️  No USB cameras detected')
+except Exception as e:
+    print(f'⚠️  Camera detection failed: {e}')
 " 2>/dev/null || echo "⚠️  Camera library test failed"
+
+# Test libcamera command line tools
+echo "Testing libcamera command line tools..."
+if command -v libcamera-hello >/dev/null 2>&1; then
+    echo "✅ libcamera-hello available"
+    # Quick camera test (timeout after 1 second)
+    timeout 1s libcamera-hello --list-cameras 2>/dev/null || echo "⚠️  No cameras detected by libcamera"
+else
+    echo "⚠️  libcamera-hello not available"
+fi
 
 echo ""
 echo "🎉 Setup complete!"
