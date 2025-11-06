@@ -229,9 +229,9 @@ class YOLOHumanTracker:
         self.lock = Lock()
         self.last_human_center = None
         
-        # PID controller parameters - EXTRA GENTLE FOR VERY SMOOTH MOVEMENT
-        self.pid_x = PIDController(kp=0.15, ki=0.005, kd=0.05)      # Further reduced Kp for ultra-gentle turning
-        self.pid_distance = PIDController(kp=0.12, ki=0.002, kd=0.03)  # Further reduced Kp for ultra-gentle movement
+        # PID controller parameters - INCREASED TURNING RESPONSIVENESS
+        self.pid_x = PIDController(kp=0.25, ki=0.008, kd=0.08)    # Increased turning responsiveness
+        self.pid_distance = PIDController(kp=0.12, ki=0.002, kd=0.03)  # Keep distance gentle
         
         # Frame dimensions (will be set when camera starts)
         self.frame_width = 640
@@ -242,8 +242,8 @@ class YOLOHumanTracker:
         self.target_human_percentage = 0.25  # Human should occupy 25% of frame height
         self.target_distance = int(self.frame_height * self.target_human_percentage)  # 120 pixels for 480p
         
-        # Control parameters - INCREASED POWER TO OVERCOME RESISTANCE
-        self.max_turn_speed = 45      # Increased from 25 to ensure visible movement
+        # Control parameters - INCREASED TURNING POWER TO OVERCOME RESISTANCE
+        self.max_turn_speed = 70      # Further increased from 45 for stronger turning force
         self.max_forward_speed = 60   # Increased from 35 to overcome resistance
         
         # Edge detection and compensation - IMPROVED
@@ -524,9 +524,9 @@ class YOLOHumanTracker:
             turn_speed = max(-self.max_turn_speed, 
                            min(self.max_turn_speed, turn_output * turn_scale))
             
-            # ENSURE MINIMUM MOVEMENT STRENGTH when action is needed
-            min_turn_threshold = 15  # Minimum turn speed to overcome resistance
-            min_forward_threshold = 12  # Minimum forward speed to overcome resistance
+            # ENSURE STRONGER MINIMUM MOVEMENT to overcome motor resistance
+            min_turn_threshold = 25  # Increased from 15 for stronger turning force
+            min_forward_threshold = 18  # Increased from 12 for stronger forward force
             
             if turn_speed != 0:
                 if 0 < abs(turn_speed) < min_turn_threshold:
@@ -553,7 +553,7 @@ class YOLOHumanTracker:
             # ENHANCED EDGE OVERRIDE: Force turning at edge regardless of deadzone
             if is_at_edge and turn_speed == 0:
                 # Force turn direction based on which edge the human is at
-                edge_turn_strength = 30  # Increased from 20 for stronger movement
+                edge_turn_strength = 40  # Further increased from 30 for much stronger edge response
                 if is_at_left_edge:
                     turn_speed = edge_turn_strength   # Turn right to center human from left edge
                     logger.debug(f"EDGE_OVERRIDE: Forcing RIGHT turn, human at LEFT edge")

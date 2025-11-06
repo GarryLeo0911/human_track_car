@@ -19,18 +19,18 @@ FRAME_CENTER_DEADZONE = 40  # Reduced from 60 for better centering response
 DISTANCE_DEADZONE = 15  # Percentage deadzone (1.5% of frame height)
 EDGE_THRESHOLD = 100  # Pixels from edge to trigger aggressive turning
 
-# PID Controller settings - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
-PID_X_KP = 0.15  # Further reduced from 0.25 for ultra-gentle turning
-PID_X_KI = 0.005  # Further reduced integral gain
-PID_X_KD = 0.05  # Reduced derivative gain
+# PID Controller settings - INCREASED TURNING RESPONSIVENESS
+PID_X_KP = 0.25  # Increased from 0.15 for stronger turning response
+PID_X_KI = 0.008  # Slightly increased integral gain
+PID_X_KD = 0.08  # Increased derivative gain for stability
 
-PID_DISTANCE_KP = 0.12  # Further reduced from 0.20 for ultra-gentle forward/back
-PID_DISTANCE_KI = 0.002  # Further reduced integral gain
-PID_DISTANCE_KD = 0.03  # Reduced derivative gain
+PID_DISTANCE_KP = 0.12  # Keep distance PID gentle
+PID_DISTANCE_KI = 0.002  # Keep distance PID gentle
+PID_DISTANCE_KD = 0.03  # Keep distance PID gentle
 
-# Motor settings - INCREASED POWER TO OVERCOME RESISTANCE  
+# Motor settings - INCREASED TURNING POWER TO OVERCOME RESISTANCE  
 MAX_SPEED = 60  # Increased from 35 to overcome resistance
-MAX_TURN_SPEED = 45  # Increased from 25 to ensure visible turning
+MAX_TURN_SPEED = 70  # Further increased from 45 for stronger turning force
 MOTOR_DEADZONE = 5  # Minimum speed to overcome motor friction
 
 # Step-by-step turning settings for ultra-smooth movement
