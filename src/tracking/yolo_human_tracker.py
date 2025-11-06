@@ -229,9 +229,9 @@ class YOLOHumanTracker:
         self.lock = Lock()
         self.last_human_center = None
         
-        # PID controller parameters - optimized for YOLO accuracy
-        self.pid_x = PIDController(kp=0.5, ki=0.02, kd=0.12)
-        self.pid_distance = PIDController(kp=0.35, ki=0.01, kd=0.08)
+        # PID controller parameters - TUNED FOR SMOOTH MOVEMENT
+        self.pid_x = PIDController(kp=0.25, ki=0.01, kd=0.08)      # Reduced Kp for gentler turning
+        self.pid_distance = PIDController(kp=0.20, ki=0.005, kd=0.05)  # Reduced Kp for gentler forward/back
         
         # Frame dimensions (will be set when camera starts)
         self.frame_width = 640
@@ -241,9 +241,9 @@ class YOLOHumanTracker:
         self.target_x = self.frame_width // 2
         self.target_distance = 150  # Target human height in pixels
         
-        # Control parameters - optimized for YOLO's accuracy
-        self.max_turn_speed = 70
-        self.max_forward_speed = 85
+        # Control parameters - REDUCED FOR SMOOTH MOVEMENT
+        self.max_turn_speed = 35      # Reduced from 70 to 35 for gentler turns
+        self.max_forward_speed = 50   # Reduced from 85 to 50 for gentler approach/retreat
         
         # Edge detection and compensation
         self.edge_threshold = 80
@@ -255,13 +255,17 @@ class YOLOHumanTracker:
         self.recent_detections = []
         self.detection_history_length = 5
         
-        # Movement smoothing
+        # Movement smoothing - ENHANCED FOR STABILITY
         self.movement_history = []
-        self.history_length = 3
+        self.history_length = 5       # Increased from 3 to 5 for more smoothing
         
         # Performance tracking
         self.detection_times = []
         self.max_time_samples = 30
+        
+        # Previous speeds for smooth transitions
+        self.prev_forward_speed = 0
+        self.prev_turn_speed = 0
     
     def start_tracking(self):
         """Start the human tracking loop."""
@@ -435,7 +439,7 @@ class YOLOHumanTracker:
             turn_output = self.pid_x.update(x_error)
             speed_output = self.pid_distance.update(distance_error)
             
-            # Adaptive scaling based on edge position
+            # Adaptive scaling based on edge position AND centering accuracy
             if is_at_edge:
                 turn_scale = 0.8
                 speed_scale = 0.9
@@ -443,15 +447,25 @@ class YOLOHumanTracker:
                 turn_scale = 1.0
                 speed_scale = 1.0
             
+            # ADDITIONAL: Gentle scaling based on how centered the human is
+            center_factor = abs(x_error) / (self.frame_width / 2)  # 0.0 = perfectly centered, 1.0 = at edge
+            center_factor = min(1.0, center_factor)  # Cap at 1.0
+            
+            # Reduce turn speed when human is already mostly centered
+            if center_factor < 0.3:  # Within 30% of center
+                turn_scale *= 0.5  # Very gentle movements when close to center
+            elif center_factor < 0.6:  # Within 60% of center  
+                turn_scale *= 0.7  # Moderately gentle movements
+            
             # Apply scaling and limits
             forward_speed = max(-self.max_forward_speed, 
                               min(self.max_forward_speed, speed_output * speed_scale))
             turn_speed = max(-self.max_turn_speed, 
                            min(self.max_turn_speed, turn_output * turn_scale))
             
-            # Deadzones - can be smaller with YOLO's accuracy
-            x_deadzone = 20
-            distance_deadzone = 12
+            # Deadzones - ENLARGED FOR STABILITY (less twitchy)
+            x_deadzone = 40      # Increased from 20 to 40 for larger center zone
+            distance_deadzone = 20  # Increased from 12 to 20 for stable distance
             
             if abs(x_error) < x_deadzone:
                 turn_speed = 0
@@ -464,14 +478,30 @@ class YOLOHumanTracker:
             if len(self.movement_history) > self.history_length:
                 self.movement_history.pop(0)
             
-            # Apply smoothing
+            # Apply smoothing - ENHANCED FOR SMOOTH MOVEMENT
             if len(self.movement_history) >= 2:
                 avg_forward = sum(m[0] for m in self.movement_history) / len(self.movement_history)
                 avg_turn = sum(m[1] for m in self.movement_history) / len(self.movement_history)
                 
-                smooth_factor = 0.4
+                smooth_factor = 0.7  # Increased from 0.4 to 0.7 for much more smoothing
                 forward_speed = smooth_factor * avg_forward + (1 - smooth_factor) * forward_speed
                 turn_speed = smooth_factor * avg_turn + (1 - smooth_factor) * turn_speed
+                
+                # Additional gentle limiting to prevent sudden changes
+                max_change_per_frame = 10  # Maximum change in speed per frame
+                if hasattr(self, 'prev_forward_speed'):
+                    forward_diff = forward_speed - self.prev_forward_speed
+                    if abs(forward_diff) > max_change_per_frame:
+                        forward_speed = self.prev_forward_speed + (max_change_per_frame if forward_diff > 0 else -max_change_per_frame)
+                        
+                if hasattr(self, 'prev_turn_speed'):
+                    turn_diff = turn_speed - self.prev_turn_speed
+                    if abs(turn_diff) > max_change_per_frame:
+                        turn_speed = self.prev_turn_speed + (max_change_per_frame if turn_diff > 0 else -max_change_per_frame)
+                
+                # Store for next frame
+                self.prev_forward_speed = forward_speed
+                self.prev_turn_speed = turn_speed
             
             # Send commands
             self.motor_controller.move_with_turn(forward_speed, turn_speed)
