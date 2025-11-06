@@ -37,6 +37,19 @@ sudo apt install -y \
     v4l-utils \
     git
 
+# Install libcamera and camera-specific dependencies
+echo "📷 Installing camera system dependencies..."
+sudo apt install -y \
+    libcamera-dev \
+    libcamera-apps \
+    python3-libcamera \
+    python3-kms++ \
+    python3-pyqt5 \
+    python3-prctl \
+    libatlas-base-dev \
+    ffmpeg \
+    python3-numpy
+
 # Enable hardware interfaces
 echo "⚙️  Configuring hardware interfaces..."
 
@@ -47,10 +60,22 @@ if ! grep -q "dtparam=i2c_arm=on" /boot/firmware/config.txt; then
 fi
 
 # Enable camera
-if ! grep -q "start_x=1" /boot/firmware/config.txt; then
-    echo "start_x=1" | sudo tee -a /boot/firmware/config.txt
+echo "📷 Configuring camera support..."
+# For Ubuntu, we need different camera configuration
+if ! grep -q "dtoverlay=vc4-kms-v3d" /boot/firmware/config.txt; then
+    echo "dtoverlay=vc4-kms-v3d" | sudo tee -a /boot/firmware/config.txt
+    echo "✅ GPU driver enabled"
+fi
+
+if ! grep -q "camera_auto_detect=1" /boot/firmware/config.txt; then
+    echo "camera_auto_detect=1" | sudo tee -a /boot/firmware/config.txt
+    echo "✅ Camera auto-detect enabled"
+fi
+
+# GPU memory is less critical on Ubuntu but still helpful
+if ! grep -q "gpu_mem=128" /boot/firmware/config.txt; then
     echo "gpu_mem=128" | sudo tee -a /boot/firmware/config.txt
-    echo "✅ Camera enabled"
+    echo "✅ GPU memory configured"
 fi
 
 # Load I2C module
