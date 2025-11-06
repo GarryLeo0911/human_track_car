@@ -5,6 +5,7 @@ Provides web interface for controlling and monitoring the human tracking car.
 
 from flask import Flask, render_template, Response, jsonify, request
 import logging
+import time
 from src.camera.camera_manager import StreamingHandler
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ def create_app(human_tracker):
     Create and configure the Flask application.
     
     Args:
-        human_tracker: HumanTracker instance
+        human_tracker: HumanTracker instance (can be None initially)
         
     Returns:
         Configured Flask app
@@ -23,11 +24,14 @@ def create_app(human_tracker):
                 template_folder='../../templates',
                 static_folder='../../static')
     
-    # Store tracker reference
+    # Store tracker reference (can be None initially)
     app.human_tracker = human_tracker
     
-    # Create streaming handler
-    app.streaming_handler = StreamingHandler(human_tracker.camera_manager)
+    # Create streaming handler (can be None initially)
+    if human_tracker and hasattr(human_tracker, 'camera_manager'):
+        app.streaming_handler = StreamingHandler(human_tracker.camera_manager)
+    else:
+        app.streaming_handler = None
     
     @app.route('/')
     def index():
@@ -37,27 +41,56 @@ def create_app(human_tracker):
     @app.route('/video_feed')
     def video_feed():
         """Video streaming route."""
-        try:
-            return Response(
-                app.streaming_handler.generate_mjpeg_stream(),
-                mimetype='multipart/x-mixed-replace; boundary=frame'
-            )
-        except Exception as e:
-            logger.error(f"Error in video feed: {e}")
-            return Response("Video feed error", status=500)
+        def generate():
+            while True:
+                try:
+                    if app.streaming_handler:
+                        # Use real camera stream
+                        for frame in app.streaming_handler.generate_mjpeg_stream():
+                            yield frame
+                            break
+                    else:
+                        # Generate placeholder frame
+                        import cv2
+                        import numpy as np
+                        
+                        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                        cv2.putText(frame, "Initializing camera...", (50, 240), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                        
+                        ret, buffer = cv2.imencode('.jpg', frame)
+                        if ret:
+                            frame_bytes = buffer.tobytes()
+                            yield (b'--frame\r\n'
+                                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                    
+                    time.sleep(0.1)
+                    
+                except Exception as e:
+                    logger.error(f"Error in video feed: {e}")
+                    time.sleep(1)
+                    
+        return Response(generate(),
+                       mimetype='multipart/x-mixed-replace; boundary=frame')
             
     @app.route('/api/status')
     def get_status():
         """Get system status."""
         try:
-            tracking_status = app.human_tracker.get_tracking_status()
-            motor_status = app.human_tracker.motor_controller.get_status()
-            camera_status = app.human_tracker.camera_manager.get_status()
+            if app.human_tracker:
+                tracking_status = app.human_tracker.get_tracking_status()
+                motor_status = app.human_tracker.motor_controller.get_status()
+                camera_status = app.human_tracker.camera_manager.get_status()
+            else:
+                tracking_status = {'tracking': False, 'last_human_center': None}
+                motor_status = {'is_moving': False, 'rpi_mode': False}
+                camera_status = {'camera_active': False, 'framerate': 0}
             
             return jsonify({
                 'tracking': tracking_status,
                 'motor': motor_status,
                 'camera': camera_status,
+                'components_ready': app.human_tracker is not None,
                 'timestamp': time.time()
             })
         except Exception as e:
@@ -68,6 +101,9 @@ def create_app(human_tracker):
     def start_tracking():
         """Start human tracking."""
         try:
+            if not app.human_tracker:
+                return jsonify({'error': 'System still initializing, please wait...'}), 503
+                
             if not app.human_tracker.tracking:
                 # Start tracking in new thread if not already running
                 import threading
@@ -86,7 +122,8 @@ def create_app(human_tracker):
     def stop_tracking():
         """Stop human tracking."""
         try:
-            app.human_tracker.stop_tracking()
+            if app.human_tracker:
+                app.human_tracker.stop_tracking()
             return jsonify({'status': 'tracking_stopped'})
         except Exception as e:
             logger.error(f"Error stopping tracking: {e}")
@@ -96,6 +133,9 @@ def create_app(human_tracker):
     def manual_control():
         """Manual motor control."""
         try:
+            if not app.human_tracker:
+                return jsonify({'error': 'System still initializing, please wait...'}), 503
+                
             data = request.get_json()
             
             if not data:
@@ -134,21 +174,32 @@ def create_app(human_tracker):
         """Get or update tracking settings."""
         try:
             if request.method == 'GET':
-                # Return current settings
-                return jsonify({
-                    'target_distance': app.human_tracker.target_distance,
-                    'pid_x': {
-                        'kp': app.human_tracker.pid_x.kp,
-                        'ki': app.human_tracker.pid_x.ki,
-                        'kd': app.human_tracker.pid_x.kd
-                    },
-                    'pid_distance': {
-                        'kp': app.human_tracker.pid_distance.kp,
-                        'ki': app.human_tracker.pid_distance.ki,
-                        'kd': app.human_tracker.pid_distance.kd
-                    }
-                })
+                if app.human_tracker:
+                    # Return current settings
+                    return jsonify({
+                        'target_distance': app.human_tracker.target_distance,
+                        'pid_x': {
+                            'kp': app.human_tracker.pid_x.kp,
+                            'ki': app.human_tracker.pid_x.ki,
+                            'kd': app.human_tracker.pid_x.kd
+                        },
+                        'pid_distance': {
+                            'kp': app.human_tracker.pid_distance.kp,
+                            'ki': app.human_tracker.pid_distance.ki,
+                            'kd': app.human_tracker.pid_distance.kd
+                        }
+                    })
+                else:
+                    # Return default settings
+                    return jsonify({
+                        'target_distance': 150,
+                        'pid_x': {'kp': 0.5, 'ki': 0.1, 'kd': 0.2},
+                        'pid_distance': {'kp': 0.3, 'ki': 0.05, 'kd': 0.1}
+                    })
             else:
+                if not app.human_tracker:
+                    return jsonify({'error': 'System still initializing, please wait...'}), 503
+                    
                 # Update settings
                 data = request.get_json()
                 
@@ -172,8 +223,5 @@ def create_app(human_tracker):
         except Exception as e:
             logger.error(f"Error in settings: {e}")
             return jsonify({'error': str(e)}), 500
-    
-    # Add time import for status endpoint
-    import time
     
     return app
