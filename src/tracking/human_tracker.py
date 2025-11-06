@@ -350,21 +350,41 @@ class HumanTracker:
             turn_output = self.pid_x.update(x_error)
             speed_output = self.pid_distance.update(distance_error)
             
-            # SPEED OPTIMIZATION: Simplified adaptive scaling
+            # FIXED: Priority-based scaling for proper tracking behavior
             if is_at_edge:
-                turn_scale = 0.7  # Less aggressive reduction for faster response
-                speed_scale = 0.8
+                # At edge: prioritize turning over distance control
+                turn_scale = 1.5  # INCREASE turn responsiveness at edge
+                speed_scale = 0.2  # REDUCE forward movement at edge
             else:
                 turn_scale = 1.0
                 speed_scale = 1.0
+            
+            # FIXED: Priority-based movement logic
+            center_factor = abs(x_error) / (self.frame_width / 2)  # 0.0 = perfectly centered, 1.0 = at edge
+            center_factor = min(1.0, center_factor)  # Cap at 1.0
+            
+            # PRIORITIZE CENTERING: Reduce distance control when not centered
+            if center_factor > 0.3:  # If significantly off-center
+                speed_scale *= 0.1  # Virtually disable forward movement
+                # Increase turn responsiveness when off-center
+                if center_factor > 0.6:  # Very off-center
+                    turn_scale *= 1.2
+                else:  # Moderately off-center
+                    turn_scale *= 1.0
+            else:
+                # Well centered - allow normal distance control
+                if center_factor < 0.1:  # Very well centered
+                    turn_scale *= 0.3  # Gentle turns when well centered
+                elif center_factor < 0.2:  # Reasonably centered
+                    turn_scale *= 0.5
             
             # Calculate speeds with scaling
             forward_speed = max(-self.max_forward_speed, min(self.max_forward_speed, speed_output * speed_scale))
             turn_speed = max(-self.max_turn_speed, min(self.max_turn_speed, turn_output * turn_scale))
             
-            # SPEED OPTIMIZATION: Reduced deadzones for faster response
-            x_deadzone = 60      # Increased back to 60 for step turning compatibility
-            distance_deadzone = 30  # Increased back to 30 for step turning compatibility
+            # FIXED deadzones for proper behavior
+            x_deadzone = 40      # Reduced from 60 for better centering
+            distance_deadzone = 50  # Increased to prevent unnecessary forward movement
             
             if abs(x_error) < x_deadzone:
                 turn_speed = 0

@@ -449,25 +449,33 @@ class YOLOHumanTracker:
             turn_output = self.pid_x.update(x_error)
             speed_output = self.pid_distance.update(distance_error)
             
-            # Adaptive scaling based on edge position AND centering accuracy
+            # Adaptive scaling based on edge position - FIXED LOGIC
             if is_at_edge:
-                turn_scale = 0.8
-                speed_scale = 0.9
+                # At edge: prioritize turning over distance control
+                turn_scale = 1.5  # INCREASE turn responsiveness at edge
+                speed_scale = 0.2  # REDUCE forward movement at edge
             else:
                 turn_scale = 1.0
                 speed_scale = 1.0
             
-            # ADDITIONAL: Extra gentle scaling based on how centered the human is
+            # FIXED: Priority-based movement logic
             center_factor = abs(x_error) / (self.frame_width / 2)  # 0.0 = perfectly centered, 1.0 = at edge
             center_factor = min(1.0, center_factor)  # Cap at 1.0
             
-            # Reduce turn speed even more aggressively when human is already mostly centered
-            if center_factor < 0.2:  # Within 20% of center (was 30%)
-                turn_scale *= 0.3  # Very very gentle movements (was 0.5)
-            elif center_factor < 0.4:  # Within 40% of center (was 60%)
-                turn_scale *= 0.5  # Very gentle movements (was 0.7)
-            elif center_factor < 0.7:  # Within 70% of center (new tier)
-                turn_scale *= 0.7  # Moderately gentle movements
+            # PRIORITIZE CENTERING: Reduce distance control when not centered
+            if center_factor > 0.3:  # If significantly off-center
+                speed_scale *= 0.1  # Virtually disable forward movement
+                # Increase turn responsiveness when off-center
+                if center_factor > 0.6:  # Very off-center
+                    turn_scale *= 1.2
+                else:  # Moderately off-center
+                    turn_scale *= 1.0
+            else:
+                # Well centered - allow normal distance control
+                if center_factor < 0.1:  # Very well centered
+                    turn_scale *= 0.3  # Gentle turns when well centered
+                elif center_factor < 0.2:  # Reasonably centered
+                    turn_scale *= 0.5
             
             # Apply scaling and limits
             forward_speed = max(-self.max_forward_speed, 
@@ -475,9 +483,9 @@ class YOLOHumanTracker:
             turn_speed = max(-self.max_turn_speed, 
                            min(self.max_turn_speed, turn_output * turn_scale))
             
-            # Deadzones - FURTHER ENLARGED FOR MAXIMUM STABILITY
-            x_deadzone = 60      # Increased from 40 to 60 for even larger center zone
-            distance_deadzone = 30  # Increased from 20 to 30 for more stable distance
+            # FIXED Deadzones - smaller for better centering
+            x_deadzone = 40      # Reduced from 60 for better centering
+            distance_deadzone = 50  # Increased to prevent unnecessary forward movement
             
             if abs(x_error) < x_deadzone:
                 turn_speed = 0

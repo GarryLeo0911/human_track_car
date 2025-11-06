@@ -12,10 +12,10 @@ MAX_DETECTION_SIZE = (300, 400)  # Added maximum size to filter out false positi
 MIN_ASPECT_RATIO = 1.5  # Minimum height/width ratio for human-like shapes
 MAX_ASPECT_RATIO = 4.0  # Maximum height/width ratio for human-like shapes
 
-# Tracking settings - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
-TARGET_HUMAN_HEIGHT = 150  # Target height in pixels (distance control)
-FRAME_CENTER_DEADZONE = 60  # Further increased from 40 for less twitchy movement
-DISTANCE_DEADZONE = 30  # Further increased for stable distance control
+# Tracking settings - FIXED FOR PROPER TRACKING BEHAVIOR
+TARGET_HUMAN_HEIGHT = 120  # Reduced from 150 - more conservative distance target
+FRAME_CENTER_DEADZONE = 40  # Reduced from 60 for better centering response
+DISTANCE_DEADZONE = 50  # Increased from 30 to prevent unnecessary forward movement
 
 # PID Controller settings - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
 PID_X_KP = 0.15  # Further reduced from 0.25 for ultra-gentle turning
