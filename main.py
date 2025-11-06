@@ -5,7 +5,7 @@ Main entry point for the human tracking car application.
 
 from src.web.app import create_app
 from src.tracking.human_tracker import HumanTracker
-from src.control.motor_controller import MotorController
+from src.control.freenove_motor_controller import FreenoveMotorController
 from src.camera.camera_manager import CameraManager
 import threading
 import logging
@@ -24,9 +24,9 @@ def main():
     
     try:
         # Initialize motor controller first (fast)
-        logger.info("Initializing motor controller...")
-        motor_controller = MotorController()
-        logger.info("Motor controller ready")
+        logger.info("Initializing Freenove motor controller...")
+        motor_controller = FreenoveMotorController()
+        logger.info("Freenove motor controller ready")
         
         # Create placeholders for camera and tracker
         camera_manager = None
@@ -66,6 +66,7 @@ def main():
         logger.info("Access the interface at:")
         logger.info("  - http://127.0.0.1:5000")
         logger.info("  - http://localhost:5000")
+        logger.info("Motor controller: Freenove 4WD Smart Car Kit compatible")
         
         app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
         
