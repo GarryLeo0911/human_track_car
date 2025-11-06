@@ -1,12 +1,13 @@
 """
-Lightweight Detector Configuration File
+Enhanced Lightweight Detector Configuration File
+Including improved accuracy detectors
 """
 
 # Detector selection configuration
 DETECTOR_CONFIGS = {
     # Motion detector - Most lightweight
     'motion': {
-        'name': 'Motion Detection',
+        'name': 'Basic Motion Detection',
         'class': 'MotionBasedDetector',
         'description': 'Frame difference based motion detection, most lightweight, suitable for detecting moving people',
         'pros': ['Extremely low CPU usage', 'Real-time performance', 'No model files required'],
@@ -14,12 +15,27 @@ DETECTOR_CONFIGS = {
         'recommended_for': ['Raspberry Pi Zero', 'Ultra low power scenarios', 'Real-time tracking'],
         'memory_usage': '~5MB',
         'cpu_usage': '~10%',
-        'detection_time': '~10ms'
+        'detection_time': '~10ms',
+        'accuracy': 'Low'
+    },
+    
+    # Enhanced motion detector - Better accuracy
+    'enhanced_motion': {
+        'name': 'Enhanced Motion Detection',
+        'class': 'EnhancedMotionDetector',
+        'description': 'Advanced background subtraction with human shape validation and multi-frame consensus',
+        'pros': ['Better human shape recognition', 'Temporal validation', 'Reduced false positives', 'Confidence scoring'],
+        'cons': ['Higher CPU usage than basic motion', 'Requires initialization period', 'More memory usage'],
+        'recommended_for': ['Raspberry Pi 3B+', 'Raspberry Pi 4', 'When accuracy matters more than speed'],
+        'memory_usage': '~15MB',
+        'cpu_usage': '~25%',
+        'detection_time': '~25ms',
+        'accuracy': 'Medium-High'
     },
     
     # Edge detector - Balanced performance
     'edge': {
-        'name': 'Edge Detection',
+        'name': 'Basic Edge Detection',
         'class': 'EdgeBasedDetector',
         'description': 'Canny edge detection based human contour detection',
         'pros': ['Medium CPU usage', 'Effective for stationary humans', 'Good lighting adaptation'],
@@ -27,7 +43,36 @@ DETECTOR_CONFIGS = {
         'recommended_for': ['Raspberry Pi 3B+', 'Indoor environments', 'Structured scenes'],
         'memory_usage': '~8MB',
         'cpu_usage': '~15%',
-        'detection_time': '~20ms'
+        'detection_time': '~20ms',
+        'accuracy': 'Medium'
+    },
+    
+    # Enhanced edge detector - Better shape analysis
+    'enhanced_edge': {
+        'name': 'Enhanced Edge Detection',
+        'class': 'EnhancedEdgeDetector',
+        'description': 'Multi-scale edge detection with sophisticated shape analysis and human proportion validation',
+        'pros': ['Better shape recognition', 'Human proportion analysis', 'Multi-scale detection', 'Confidence scoring'],
+        'cons': ['Higher computational cost', 'May miss very blurred humans', 'Sensitive to lighting changes'],
+        'recommended_for': ['Raspberry Pi 3B+', 'Raspberry Pi 4', 'High-accuracy applications'],
+        'memory_usage': '~12MB',
+        'cpu_usage': '~30%',
+        'detection_time': '~35ms',
+        'accuracy': 'High'
+    },
+    
+    # Hybrid detector - Best accuracy
+    'hybrid': {
+        'name': 'Hybrid Detection (Motion + Edge)',
+        'class': 'HybridHumanDetector',
+        'description': 'Combines enhanced motion and edge detection for maximum accuracy and reliability',
+        'pros': ['Highest accuracy', 'Robust to different conditions', 'Multi-method consensus', 'Best false positive reduction'],
+        'cons': ['Highest resource usage', 'Slowest detection', 'Complex parameter tuning'],
+        'recommended_for': ['Raspberry Pi 4', 'Critical applications', 'When maximum accuracy is required'],
+        'memory_usage': '~25MB',
+        'cpu_usage': '~45%',
+        'detection_time': '~50ms',
+        'accuracy': 'Very High'
     },
     
     # Skin color detector - Specific scenarios
@@ -43,52 +88,43 @@ DETECTOR_CONFIGS = {
         'detection_time': '~15ms'
     },
     
-    # Background subtraction detector - Improved motion detection
-    'background': {
-        'name': 'Background Subtraction',
-        'class': 'BackgroundSubtractionDetector',
-        'description': 'Gaussian mixture model based background subtraction for foreground moving target detection',
-        'pros': ['Adaptive background learning', 'Stable detection', 'Strong noise resistance'],
-        'cons': ['Requires initialization time', 'Sensitive to background changes', 'Poor stationary human detection'],
-        'recommended_for': ['Fixed camera position', 'Indoor monitoring', 'Long-term operation'],
-        'memory_usage': '~12MB',
-        'cpu_usage': '~18%',
-        'detection_time': '~25ms'
-    },
-    
-    # Hybrid detector - Best results
-    'hybrid': {
-        'name': 'Hybrid Detection',
-        'class': 'HybridDetector',
-        'description': 'Combination of multiple detection methods to improve detection stability',
-        'pros': ['High detection stability', 'Strong adaptability', 'Low false positive rate'],
-        'cons': ['Higher CPU usage', 'Increased complexity', 'Slightly higher latency'],
-        'recommended_for': ['Raspberry Pi 4', 'Critical applications', 'High reliability requirements'],
-        'memory_usage': '~20MB',
-        'cpu_usage': '~25%',
-        'detection_time': '~35ms'
+    # Color detector - Skin tone based
+    'color': {
+        'name': 'Skin Color Detection',
+        'class': 'ColorBasedDetector',
+        'description': 'Skin tone HSV color space detection, good for detecting people wearing short sleeves',
+        'pros': ['Fast processing', 'Good for skin detection', 'Low computational cost'],
+        'cons': ['Lighting dependent', 'Ethnicity bias', 'Clothing dependent', 'False positives with similar colors'],
+        'recommended_for': ['Controlled lighting', 'Close-range detection', 'Skin exposure scenarios'],
+        'memory_usage': '~6MB',
+        'cpu_usage': '~12%',
+        'detection_time': '~15ms',
+        'accuracy': 'Medium'
     }
 }
 
-# Default detector selection
-DEFAULT_DETECTOR = 'motion'
+# Default detector selection (enhanced motion for better accuracy)
+DEFAULT_DETECTOR = 'enhanced_motion'
 
-# Platform-based recommendations
+# Platform-based recommendations with enhanced detectors
 PLATFORM_RECOMMENDATIONS = {
     'raspberry_pi_zero': {
         'recommended': 'motion',
         'alternatives': ['color'],
-        'avoid': ['edge', 'background', 'hybrid']
+        'avoid': ['enhanced_motion', 'enhanced_edge', 'hybrid'],
+        'reason': 'Limited CPU and memory, requires most lightweight options'
     },
     'raspberry_pi_3': {
-        'recommended': 'edge',
-        'alternatives': ['motion', 'color'],
-        'avoid': ['hybrid']
+        'recommended': 'enhanced_motion',
+        'alternatives': ['motion', 'edge', 'color'],
+        'avoid': ['hybrid'],
+        'reason': 'Good balance of performance and accuracy'
     },
     'raspberry_pi_4': {
-        'recommended': 'background',
-        'alternatives': ['edge', 'hybrid'],
-        'avoid': []
+        'recommended': 'hybrid',
+        'alternatives': ['enhanced_motion', 'enhanced_edge'],
+        'avoid': [],
+        'reason': 'Sufficient resources for maximum accuracy'
     },
     'other': {
         'recommended': 'motion',

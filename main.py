@@ -22,11 +22,11 @@ def main():
     """Main function to start the human tracking car system."""
     
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Human Tracking Car with Multiple Detection Options')
+    parser = argparse.ArgumentParser(description='Human Tracking Car with Enhanced Detection Options')
     parser.add_argument('--detector', 
-                       choices=['yolo', 'hog', 'motion', 'edge', 'color', 'background', 'auto'], 
+                       choices=['yolo', 'hog', 'motion', 'edge', 'color', 'enhanced_motion', 'enhanced_edge', 'hybrid', 'auto'], 
                        default='auto',
-                       help='Detection method: yolo (YOLOv8n), hog (traditional), motion (ultra-light), edge (lightweight), color (skin-based), background (MOG2), auto (intelligent selection)')
+                       help='Detection method: yolo (YOLOv8n), hog (traditional), motion (basic), edge (basic), color (skin-based), enhanced_motion (improved motion), enhanced_edge (improved edge), hybrid (motion+edge), auto (intelligent selection)')
     parser.add_argument('--platform', 
                        choices=['raspberry_pi_zero', 'raspberry_pi_3', 'raspberry_pi_4', 'other'],
                        default='other',
@@ -65,8 +65,8 @@ def main():
                 logger.info("Initializing human tracker...")
                 
                 # Determine which tracker to use
-                if detector_choice in ['motion', 'edge', 'color', 'background']:
-                    # Use ultra-lightweight trackers
+                if detector_choice in ['motion', 'edge', 'color', 'enhanced_motion', 'enhanced_edge', 'hybrid']:
+                    # Use ultra-lightweight trackers (including enhanced versions)
                     from src.tracking.ultra_light_tracker import UltraLightHumanTracker
                     human_tracker = UltraLightHumanTracker(camera_manager, motor_controller, detector_choice)
                     logger.info(f"Ultra-lightweight {detector_choice} tracker ready")
@@ -88,7 +88,7 @@ def main():
                     logger.info("HOG human tracker ready (pure visual)")
                         
                 else:  # auto
-                    # Intelligent selection based on platform
+                    # Intelligent selection based on platform (prefer enhanced detectors)
                     try:
                         from config.lightweight_detector_config import recommend_detector
                         recommended, details = recommend_detector(
@@ -98,8 +98,8 @@ def main():
                         )
                         logger.info(f"Auto-selection recommended: {recommended} (based on {details})")
                         
-                        # Try recommended lightweight detector first
-                        if recommended in ['motion', 'edge', 'color', 'background']:
+                        # Try recommended lightweight detector first (including enhanced versions)
+                        if recommended in ['motion', 'edge', 'color', 'enhanced_motion', 'enhanced_edge', 'hybrid']:
                             from src.tracking.ultra_light_tracker import UltraLightHumanTracker
                             human_tracker = UltraLightHumanTracker(camera_manager, motor_controller, recommended)
                             logger.info(f"Auto-selected ultra-lightweight {recommended} tracker")

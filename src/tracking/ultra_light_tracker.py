@@ -1,6 +1,6 @@
 """
-Ultra-Lightweight Human Detection and Tracking Module - Simplified Version
-Minimalist human detection solutions designed for Raspberry Pi
+Enhanced Ultra-Lightweight Human Detection and Tracking Module
+Advanced human detection solutions with improved accuracy for Raspberry Pi
 """
 
 import cv2
@@ -9,6 +9,7 @@ import logging
 import time
 from threading import Lock
 from typing import Tuple, Optional, List
+from .enhanced_human_detector import HybridHumanDetector, EnhancedMotionDetector, EnhancedEdgeDetector
 
 logger = logging.getLogger(__name__)
 
@@ -247,12 +248,12 @@ class UltraLightHumanTracker:
         Args:
             camera_manager: Camera manager instance
             motor_controller: Motor controller instance
-            detector_type: Detector type ('motion', 'edge', 'color')
+            detector_type: Detector type ('motion', 'edge', 'color', 'enhanced_motion', 'enhanced_edge', 'hybrid')
         """
         self.camera_manager = camera_manager
         self.motor_controller = motor_controller
         
-        # Select detector
+        # Select detector with enhanced options
         if detector_type == 'motion':
             self.detector = MotionBasedDetector()
             self.detector_name = "Motion Detection"
@@ -262,10 +263,19 @@ class UltraLightHumanTracker:
         elif detector_type == 'color':
             self.detector = ColorBasedDetector()
             self.detector_name = "Skin Color Detection"
+        elif detector_type == 'enhanced_motion':
+            self.detector = EnhancedMotionDetector()
+            self.detector_name = "Enhanced Motion Detection"
+        elif detector_type == 'enhanced_edge':
+            self.detector = EnhancedEdgeDetector()
+            self.detector_name = "Enhanced Edge Detection"
+        elif detector_type == 'hybrid':
+            self.detector = HybridHumanDetector()
+            self.detector_name = "Hybrid Detection (Motion + Edge)"
         else:
-            # Default to motion detection
-            self.detector = MotionBasedDetector()
-            self.detector_name = "Motion Detection"
+            # Default to enhanced motion detection for better accuracy
+            self.detector = EnhancedMotionDetector()
+            self.detector_name = "Enhanced Motion Detection (Default)"
         
         # Tracking state
         self.tracking = False
@@ -324,9 +334,16 @@ class UltraLightHumanTracker:
                 detection_time = (time.time() - start_time) * 1000
                 
                 if human_detections:
-                    # Select the largest detection
-                    best_detection = max(human_detections, key=lambda box: box[2] * box[3])
-                    x, y, w, h = best_detection
+                    # Handle both old format (x,y,w,h) and new format (x,y,w,h,confidence)
+                    if len(human_detections[0]) == 5:
+                        # Enhanced detectors return confidence
+                        best_detection = max(human_detections, key=lambda box: box[4])  # Select by confidence
+                        x, y, w, h, confidence = best_detection[:5]
+                        logger.debug(f"Human detected with confidence: {confidence:.2f}")
+                    else:
+                        # Original detectors return just bounding box
+                        best_detection = max(human_detections, key=lambda box: box[2] * box[3])  # Select by area
+                        x, y, w, h = best_detection[:4]
                     
                     # Calculate center point
                     center_x = x + w // 2
