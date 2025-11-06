@@ -242,9 +242,9 @@ class YOLOHumanTracker:
         self.target_human_percentage = 0.25  # Human should occupy 25% of frame height
         self.target_distance = int(self.frame_height * self.target_human_percentage)  # 120 pixels for 480p
         
-        # Control parameters - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
-        self.max_turn_speed = 25      # Further reduced from 35 to 25 for ultra-gentle turns
-        self.max_forward_speed = 35   # Further reduced from 50 to 35 for ultra-gentle approach/retreat
+        # Control parameters - INCREASED POWER TO OVERCOME RESISTANCE
+        self.max_turn_speed = 45      # Increased from 25 to ensure visible movement
+        self.max_forward_speed = 60   # Increased from 35 to overcome resistance
         
         # Edge detection and compensation - IMPROVED
         self.edge_threshold = 100  # Increased from 80 for earlier edge detection
@@ -347,17 +347,19 @@ class YOLOHumanTracker:
                     else:
                         continue  # Skip invalid detection
                     
-                    # Calculate center and track
+                    # Calculate center and track with bounding box info
                     center_x = x + w // 2
                     center_y = y + h // 2
                     human_height = h
+                    bbox_left = x
+                    bbox_right = x + w
                     
                     # Update tracking state
                     with self.lock:
                         self.last_human_center = (center_x, center_y, human_height)
                     
-                    # Control car movement
-                    self._track_human(center_x, human_height)
+                    # Control car movement with bounding box information
+                    self._track_human(center_x, human_height, bbox_left, bbox_right)
                     
                     # Enhanced visualization for YOLO
                     self._draw_enhanced_visualization(frame, x, y, w, h, center_x, center_y, 
@@ -432,8 +434,16 @@ class YOLOHumanTracker:
         cv2.putText(frame, f"Size: {w}x{h}", 
                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
     
-    def _track_human(self, center_x: int, human_height: int):
-        """Control car movement to track human."""
+    def _track_human(self, center_x: int, human_height: int, bbox_left: Optional[int] = None, bbox_right: Optional[int] = None):
+        """
+        Control car movement to track human.
+        
+        Args:
+            center_x: X coordinate of human center
+            human_height: Height of detected human in pixels
+            bbox_left: Left edge of bounding box (optional)
+            bbox_right: Right edge of bounding box (optional)
+        """
         try:
             # Reset detection counter
             self.frames_since_detection = 0
@@ -450,8 +460,17 @@ class YOLOHumanTracker:
             # Convert percentage error to pixel equivalent for PID
             distance_error_pixels = distance_error * self.frame_height
             
-            # Enhanced edge detection
-            is_at_edge = center_x < self.edge_threshold or center_x > (self.frame_width - self.edge_threshold)
+            # FIXED: Enhanced edge detection - check if human is CUT OFF at edges
+            if bbox_left is not None and bbox_right is not None:
+                # Check if human bounding box is cut off at frame edges
+                is_at_left_edge = bbox_left <= 5  # Human cut off at left edge
+                is_at_right_edge = bbox_right >= (self.frame_width - 5)  # Human cut off at right edge
+                is_at_edge = is_at_left_edge or is_at_right_edge
+            else:
+                # Fallback: use center position method
+                is_at_left_edge = center_x < self.edge_threshold
+                is_at_right_edge = center_x > (self.frame_width - self.edge_threshold) 
+                is_at_edge = is_at_left_edge or is_at_right_edge
             
             # PID control
             turn_output = self.pid_x.update(x_error)
@@ -460,14 +479,14 @@ class YOLOHumanTracker:
             # Debug logging for troubleshooting
             logger.debug(f"DISTANCE: current={current_percentage:.2%}, target={target_percentage:.2%}, "
                         f"error={distance_error:.3f}, pixels_err={distance_error_pixels:.1f}")
-            logger.debug(f"EDGE: at_edge={is_at_edge}, center_x={center_x}, threshold={self.edge_threshold}")
+            logger.debug(f"EDGE: at_edge={is_at_edge}, left_edge={is_at_left_edge}, right_edge={is_at_right_edge}")
             
-            # FIXED: Edge behavior prioritization
+            # FIXED: Edge behavior prioritization with stronger response
             if is_at_edge:
-                # At edge: FORCE turning, minimize distance control
-                turn_scale = 2.0     # STRONG turn response at edge
-                speed_scale = 0.1    # Minimal forward movement at edge
-                logger.debug(f"EDGE_MODE: Strong turn scaling applied")
+                # At edge: FORCE turning, disable distance control completely
+                turn_scale = 3.0     # VERY STRONG turn response at edge (increased from 2.0)
+                speed_scale = 0.0    # DISABLE forward movement at edge completely
+                logger.debug(f"EDGE_MODE: Very strong turn scaling applied")
             else:
                 turn_scale = 1.0
                 speed_scale = 1.0
@@ -476,29 +495,46 @@ class YOLOHumanTracker:
             center_factor = abs(x_error) / (self.frame_width / 2)  # 0.0 = perfectly centered, 1.0 = at edge
             center_factor = min(1.0, center_factor)  # Cap at 1.0
             
-            # PRIORITIZE CENTERING: Reduce distance control when not centered, but allow some response
-            if center_factor > 0.5:  # Very off-center (was 0.3)
-                speed_scale *= 0.1  # Virtually disable forward movement
+            # IMPROVED: Distance control with safety checks
+            if center_factor > 0.5:  # Very off-center 
+                speed_scale *= 0.1  # Almost disable forward movement
                 # Increase turn responsiveness when off-center
-                if center_factor > 0.7:  # Very off-center (was 0.6)
-                    turn_scale *= 1.2
+                if center_factor > 0.7:  # Very off-center
+                    turn_scale *= 1.5
                 else:  # Moderately off-center
-                    turn_scale *= 1.0
+                    turn_scale *= 1.2
             elif center_factor > 0.3:  # Moderately off-center - allow some distance control
-                speed_scale *= 0.4  # Reduce but don't eliminate forward movement
-                turn_scale *= 1.0
+                speed_scale *= 0.3  # Significantly reduce forward movement
+                turn_scale *= 1.1
             else:
-                # Well centered - allow normal distance control
-                if center_factor < 0.1:  # Very well centered
-                    turn_scale *= 0.3  # Gentle turns when well centered
+                # Well centered - allow distance control BUT with safety limits
+                if current_percentage > 0.4:  # Human is VERY large (very close)
+                    speed_scale *= 0.2  # Minimal movement when very close
+                    logger.debug(f"SAFETY: Very close detected, minimal movement")
+                elif current_percentage > 0.3:  # Human is large (close)
+                    speed_scale *= 0.5  # Reduced movement when close
+                elif center_factor < 0.1:  # Very well centered
+                    turn_scale *= 0.4  # Gentle turns when well centered
                 elif center_factor < 0.2:  # Reasonably centered
-                    turn_scale *= 0.5
+                    turn_scale *= 0.6
             
-            # Apply scaling and limits
+            # Apply scaling and limits with minimum thresholds
             forward_speed = max(-self.max_forward_speed, 
                               min(self.max_forward_speed, speed_output * speed_scale))
             turn_speed = max(-self.max_turn_speed, 
                            min(self.max_turn_speed, turn_output * turn_scale))
+            
+            # ENSURE MINIMUM MOVEMENT STRENGTH when action is needed
+            min_turn_threshold = 15  # Minimum turn speed to overcome resistance
+            min_forward_threshold = 12  # Minimum forward speed to overcome resistance
+            
+            if turn_speed != 0:
+                if 0 < abs(turn_speed) < min_turn_threshold:
+                    turn_speed = min_turn_threshold if turn_speed > 0 else -min_turn_threshold
+                    
+            if forward_speed != 0:
+                if 0 < abs(forward_speed) < min_forward_threshold:
+                    forward_speed = min_forward_threshold if forward_speed > 0 else -min_forward_threshold
             
             # FIXED Deadzones - percentage-based distance deadzone
             x_deadzone = 40      # Pixels for centering
@@ -516,14 +552,14 @@ class YOLOHumanTracker:
             
             # ENHANCED EDGE OVERRIDE: Force turning at edge regardless of deadzone
             if is_at_edge and turn_speed == 0:
-                # Force turn direction based on position at edge  
-                edge_turn_strength = 20  # Gentle but definite turn
-                if center_x < self.frame_width // 2:
-                    turn_speed = -edge_turn_strength  # Turn left to center
-                    logger.debug(f"EDGE_OVERRIDE: Forcing left turn, center_x={center_x}")
-                else:
-                    turn_speed = edge_turn_strength   # Turn right to center
-                    logger.debug(f"EDGE_OVERRIDE: Forcing right turn, center_x={center_x}")
+                # Force turn direction based on which edge the human is at
+                edge_turn_strength = 30  # Increased from 20 for stronger movement
+                if is_at_left_edge:
+                    turn_speed = edge_turn_strength   # Turn right to center human from left edge
+                    logger.debug(f"EDGE_OVERRIDE: Forcing RIGHT turn, human at LEFT edge")
+                elif is_at_right_edge:
+                    turn_speed = -edge_turn_strength  # Turn left to center human from right edge  
+                    logger.debug(f"EDGE_OVERRIDE: Forcing LEFT turn, human at RIGHT edge")
                 forward_speed = 0
             
             # STEP-BY-STEP TURNING LOGIC for ultra-smooth movement

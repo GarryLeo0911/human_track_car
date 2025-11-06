@@ -178,9 +178,9 @@ class HumanTracker:
         self.target_human_percentage = 0.25  # Human should occupy 25% of frame height
         self.target_distance = int(self.frame_height * self.target_human_percentage)  # 120 pixels for 480p
         
-        # SPEED OPTIMIZED control parameters - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
-        self.max_turn_speed = 25      # Further reduced from 35 to 25 for ultra-gentle turns
-        self.max_forward_speed = 35   # Further reduced from 50 to 35 for ultra-gentle approach
+        # SPEED OPTIMIZED control parameters - INCREASED POWER TO OVERCOME RESISTANCE
+        self.max_turn_speed = 45      # Increased from 25 to ensure visible movement
+        self.max_forward_speed = 60   # Increased from 35 to overcome resistance
         
         # Edge detection and compensation - IMPROVED
         self.edge_threshold = 100     # Increased from 80 for earlier edge detection
@@ -412,11 +412,23 @@ class HumanTracker:
             # ENHANCED EDGE OVERRIDE: Force turning at edge regardless of deadzone
             if is_at_edge and turn_speed == 0:
                 # Force turn direction based on position at edge
-                edge_turn_strength = 20  # Gentle but definite turn
+                edge_turn_strength = 30  # Increased from 20 for stronger movement
                 if center_x < self.frame_width // 2:
                     turn_speed = -edge_turn_strength  # Turn left to center
                 else:
                     turn_speed = edge_turn_strength   # Turn right to center
+            
+            # ENSURE MINIMUM MOVEMENT STRENGTH when action is needed
+            min_turn_threshold = 15  # Minimum turn speed to overcome resistance
+            min_forward_threshold = 12  # Minimum forward speed to overcome resistance
+            
+            if turn_speed != 0:
+                if 0 < abs(turn_speed) < min_turn_threshold:
+                    turn_speed = min_turn_threshold if turn_speed > 0 else -min_turn_threshold
+                    
+            if forward_speed != 0:
+                if 0 < abs(forward_speed) < min_forward_threshold:
+                    forward_speed = min_forward_threshold if forward_speed > 0 else -min_forward_threshold
                 forward_speed = 0
             
             # STEP-BY-STEP TURNING LOGIC for ultra-smooth movement with edge override

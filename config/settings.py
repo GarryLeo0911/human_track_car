@@ -28,9 +28,9 @@ PID_DISTANCE_KP = 0.12  # Further reduced from 0.20 for ultra-gentle forward/bac
 PID_DISTANCE_KI = 0.002  # Further reduced integral gain
 PID_DISTANCE_KD = 0.03  # Reduced derivative gain
 
-# Motor settings - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
-MAX_SPEED = 35  # Further reduced from 50 for ultra-gentle movement
-MAX_TURN_SPEED = 25  # Further reduced from 35 for ultra-gentle turning
+# Motor settings - INCREASED POWER TO OVERCOME RESISTANCE  
+MAX_SPEED = 60  # Increased from 35 to overcome resistance
+MAX_TURN_SPEED = 45  # Increased from 25 to ensure visible turning
 MOTOR_DEADZONE = 5  # Minimum speed to overcome motor friction
 
 # Step-by-step turning settings for ultra-smooth movement
