@@ -13,9 +13,9 @@ MIN_ASPECT_RATIO = 1.5  # Minimum height/width ratio for human-like shapes
 MAX_ASPECT_RATIO = 4.0  # Maximum height/width ratio for human-like shapes
 
 # Tracking settings - FIXED FOR PROPER TRACKING BEHAVIOR
-TARGET_HUMAN_HEIGHT = 120  # Reduced from 150 - more conservative distance target
+TARGET_HUMAN_HEIGHT = 120  # Target height in pixels (distance control)
 FRAME_CENTER_DEADZONE = 40  # Reduced from 60 for better centering response
-DISTANCE_DEADZONE = 50  # Increased from 30 to prevent unnecessary forward movement
+DISTANCE_DEADZONE = 25  # Reduced from 50 - was too large, preventing distance reactions
 
 # PID Controller settings - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
 PID_X_KP = 0.15  # Further reduced from 0.25 for ultra-gentle turning

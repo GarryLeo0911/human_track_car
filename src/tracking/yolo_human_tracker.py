@@ -462,14 +462,17 @@ class YOLOHumanTracker:
             center_factor = abs(x_error) / (self.frame_width / 2)  # 0.0 = perfectly centered, 1.0 = at edge
             center_factor = min(1.0, center_factor)  # Cap at 1.0
             
-            # PRIORITIZE CENTERING: Reduce distance control when not centered
-            if center_factor > 0.3:  # If significantly off-center
+            # PRIORITIZE CENTERING: Reduce distance control when not centered, but allow some response
+            if center_factor > 0.5:  # Very off-center (was 0.3)
                 speed_scale *= 0.1  # Virtually disable forward movement
                 # Increase turn responsiveness when off-center
-                if center_factor > 0.6:  # Very off-center
+                if center_factor > 0.7:  # Very off-center (was 0.6)
                     turn_scale *= 1.2
                 else:  # Moderately off-center
                     turn_scale *= 1.0
+            elif center_factor > 0.3:  # Moderately off-center - allow some distance control
+                speed_scale *= 0.4  # Reduce but don't eliminate forward movement
+                turn_scale *= 1.0
             else:
                 # Well centered - allow normal distance control
                 if center_factor < 0.1:  # Very well centered
@@ -483,9 +486,16 @@ class YOLOHumanTracker:
             turn_speed = max(-self.max_turn_speed, 
                            min(self.max_turn_speed, turn_output * turn_scale))
             
-            # FIXED Deadzones - smaller for better centering
+            # FIXED Deadzones - smaller for better centering, but bypass at edge
             x_deadzone = 40      # Reduced from 60 for better centering
-            distance_deadzone = 50  # Increased to prevent unnecessary forward movement
+            distance_deadzone = 25  # Reduced from 50 - was preventing distance reactions
+            
+            # EDGE OVERRIDE: Bypass deadzone when at edge for aggressive turning
+            if is_at_edge:
+                x_deadzone = 10  # Much smaller deadzone at edge
+                # Force turning even in deadzone
+                if abs(x_error) < 40 and turn_speed == 0:  # If deadzone killed turn_speed
+                    turn_speed = 15 if x_error > 0 else -15  # Force gentle turn
             
             if abs(x_error) < x_deadzone:
                 turn_speed = 0
@@ -495,8 +505,14 @@ class YOLOHumanTracker:
             # STEP-BY-STEP TURNING LOGIC for ultra-smooth movement
             current_time = time.time()
             
-            if self.step_turn_enabled and turn_speed != 0:
-                # Handle step-by-step turning
+            if self.step_turn_enabled and (turn_speed != 0 or is_at_edge):
+                # Handle step-by-step turning (allow at edge even if turn_speed was 0)
+                if turn_speed == 0 and is_at_edge:
+                    # Force turn direction based on position at edge
+                    if center_x < self.frame_width // 2:
+                        turn_speed = -15  # Turn left to center
+                    else:
+                        turn_speed = 15   # Turn right to center
                 turn_speed = self._handle_step_turning(turn_speed, x_error, current_time)
             
             # Movement smoothing for forward movement only (turning is now stepped)
