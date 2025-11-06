@@ -64,8 +64,6 @@ For detailed Ubuntu setup instructions, see [UBUNTU_SETUP.md](UBUNTU_SETUP.md).
 
 ### For Raspberry Pi OS (Traditional)
 
-### For Raspberry Pi OS (Traditional)
-
 #### 1. Setup Raspberry Pi
 
 ```bash
@@ -82,8 +80,6 @@ sudo raspi-config
 
 #### 2. Clone and Setup Project
 
-#### 2. Clone and Setup Project
-
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -96,8 +92,6 @@ source .venv/bin/activate
 # Install Python packages
 pip install -r requirements.txt
 ```
-
-#### 3. Hardware Setup
 
 #### 3. Hardware Setup
 
