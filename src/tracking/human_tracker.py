@@ -39,25 +39,25 @@ class HumanDetector:
             # Convert to grayscale for HOG (more stable)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             
-            # Enhance contrast for better detection
-            gray = cv2.equalizeHist(gray)
+            # SPEED OPTIMIZATION: Skip contrast enhancement for faster processing
+            # gray = cv2.equalizeHist(gray)  # Commented out for speed
             
-            # Resize frame for processing (keep original aspect ratio)
-            if width > 480:
-                scale = 480 / width
-                new_width = 480
+            # SPEED OPTIMIZATION: More aggressive resizing for faster detection
+            if width > 320:  # Reduced from 480 to 320 for speed
+                scale = 320 / width
+                new_width = 320
                 new_height = int(height * scale)
                 gray_resized = cv2.resize(gray, (new_width, new_height))
             else:
                 gray_resized = gray.copy()
                 scale = 1.0
             
-            # Detect people with improved parameters
+            # SPEED OPTIMIZATION: Faster detection parameters
             boxes, weights = self.hog.detectMultiScale(
                 gray_resized,
-                winStride=(4, 4),        # Smaller stride for better detection
-                padding=(16, 16),        # Smaller padding  
-                scale=1.02               # Smaller scale step for more thorough search
+                winStride=(8, 8),        # Increased from (4,4) for speed
+                padding=(8, 8),          # Reduced from (16,16) for speed
+                scale=1.05               # Increased from 1.02 for speed (fewer scales)
             )
             
             # Scale boxes back to original size
@@ -65,14 +65,13 @@ class HumanDetector:
                 boxes = [(int(x/scale), int(y/scale), int(w/scale), int(h/scale)) 
                         for x, y, w, h in boxes]
             
-            # Filter detections
+            # SPEED OPTIMIZATION: Simplified filtering for faster processing
             confident_boxes = []
             for i, (x, y, w, h) in enumerate(boxes):
-                # Lower confidence threshold and add size filtering
-                if weights[i] > 0.3:  # Lower confidence threshold
-                    # Filter by reasonable human dimensions
-                    aspect_ratio = h / w if w > 0 else 0
-                    if 1.2 < aspect_ratio < 4.0 and w > 30 and h > 60:  # Reasonable human proportions
+                # Relaxed confidence threshold for speed
+                if weights[i] > 0.2:  # Lowered from 0.3 for faster detection
+                    # Basic size filtering only
+                    if w > 20 and h > 40:  # Simplified from complex aspect ratio check
                         confident_boxes.append((x, y, w, h))
             
             return confident_boxes
@@ -102,9 +101,9 @@ class HumanTracker:
         self.lock = Lock()
         self.last_human_center = None
         
-        # PID controller parameters - REDUCED for stability
-        self.pid_x = PIDController(kp=0.3, ki=0.02, kd=0.15)      # Reduced from 0.5, 0.1, 0.2
-        self.pid_distance = PIDController(kp=0.2, ki=0.01, kd=0.08)  # Reduced from 0.3, 0.05, 0.1
+        # PID controller parameters - OPTIMIZED for faster response
+        self.pid_x = PIDController(kp=0.6, ki=0.05, kd=0.1)      # Increased kp for faster response
+        self.pid_distance = PIDController(kp=0.4, ki=0.02, kd=0.05)  # Increased kp, reduced kd
         
         # Frame dimensions (will be set when camera starts)
         self.frame_width = 640
@@ -114,19 +113,23 @@ class HumanTracker:
         self.target_x = self.frame_width // 2  # Center of frame
         self.target_distance = 150  # Target human height in pixels
         
-        # Adaptive control parameters
-        self.max_turn_speed = 60      # Reduced from 100 to prevent overshooting
-        self.max_forward_speed = 80   # Reduced from 100 for smoother movement
+        # SPEED OPTIMIZED control parameters
+        self.max_turn_speed = 80      # Increased from 60 for faster response
+        self.max_forward_speed = 90   # Increased from 80 for faster response
         
         # Edge detection and compensation
-        self.edge_threshold = 100     # Pixels from edge to be considered "at edge"
+        self.edge_threshold = 80      # Reduced from 100 for faster edge response
         self.last_valid_center = None
         self.frames_since_detection = 0
-        self.max_frames_without_detection = 10  # Stop after this many frames
+        self.max_frames_without_detection = 5  # Reduced from 10 for faster timeout
         
-        # Movement smoothing
+        # SPEED OPTIMIZATION: Reduced movement smoothing
         self.movement_history = []
-        self.history_length = 3       # Average over last 3 movements
+        self.history_length = 2       # Reduced from 3 for faster response
+        
+        # SPEED OPTIMIZATION: Frame processing control
+        self.frame_skip_count = 0
+        self.process_every_n_frames = 2  # Process every 2nd frame for speed
         
     def start_tracking(self):
         """Start the human tracking loop."""
@@ -147,14 +150,26 @@ class HumanTracker:
                 if frame is None:
                     continue
                 
+                # SPEED OPTIMIZATION: Frame skipping for faster processing
+                self.frame_skip_count += 1
+                should_process = (self.frame_skip_count % self.process_every_n_frames == 0)
+                
                 # Update frame dimensions
                 self.frame_height, self.frame_width = frame.shape[:2]
                 self.target_x = self.frame_width // 2
                 
-                # Detect humans
-                human_boxes = self.detector.detect_humans(frame)
+                if should_process:
+                    # Detect humans only on processed frames
+                    human_boxes = self.detector.detect_humans(frame)
+                else:
+                    # Use last detection result for skipped frames
+                    human_boxes = getattr(self, '_last_detection', [])
                 
                 if human_boxes:
+                    # Store detection for frame skipping
+                    if should_process:
+                        self._last_detection = human_boxes
+                        
                     # Select the largest detection (closest person)
                     largest_box = max(human_boxes, key=lambda box: box[2] * box[3])
                     x, y, w, h = largest_box
@@ -168,72 +183,28 @@ class HumanTracker:
                     with self.lock:
                         self.last_human_center = (center_x, center_y, human_height)
                     
-                    # Calculate control commands
+                    # Calculate control commands FIRST for speed
                     self._track_human(center_x, human_height)
                     
-                    # Draw detection on frame with enhanced visualization
-                    # Main bounding box
+                    # SPEED OPTIMIZATION: Simplified visualization
+                    # Main bounding box only
                     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                     
                     # Center point
-                    cv2.circle(frame, (center_x, center_y), 8, (0, 0, 255), -1)
-                    cv2.circle(frame, (center_x, center_y), 12, (255, 255, 255), 2)
+                    cv2.circle(frame, (center_x, center_y), 5, (0, 0, 255), -1)
                     
                     # Target center line
-                    cv2.line(frame, (self.target_x, 0), (self.target_x, self.frame_height), (255, 0, 0), 2)
+                    cv2.line(frame, (self.target_x, 0), (self.target_x, self.frame_height), (255, 0, 0), 1)
                     
-                    # Distance and error info
+                    # SPEED OPTIMIZATION: Minimal status text
                     x_error = center_x - self.target_x
+                    cv2.putText(frame, f"TRACKING: X={x_error:+.0f}", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    # SPEED OPTIMIZATION: Minimal status text only
                     distance_error = self.target_distance - human_height
-                    
-                    # Status text
-                    cv2.putText(frame, f"Target Found", (10, 30), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-                    cv2.putText(frame, f"Center: ({center_x}, {center_y})", (10, 60), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-                    cv2.putText(frame, f"Size: {w}x{h}", (10, 90), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-                    cv2.putText(frame, f"X Error: {x_error}", (10, 120), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-                    cv2.putText(frame, f"Dist Error: {distance_error}", (10, 150), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-                    
-                    # Add movement direction indicators
-                    cv2.putText(frame, f"Target Height: {self.target_distance}", (10, 180), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-                    if human_height > self.target_distance:
-                        cv2.putText(frame, "TOO CLOSE - BACKING UP", (10, 210), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                    elif human_height < self.target_distance:
-                        cv2.putText(frame, "TOO FAR - MOVING FORWARD", (10, 210), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                    else:
-                        cv2.putText(frame, "DISTANCE OK", (10, 210), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-                    
-                    # Add edge detection indicators
-                    is_at_left_edge = center_x < self.edge_threshold
-                    is_at_right_edge = center_x > (self.frame_width - self.edge_threshold)
-                    is_at_edge = is_at_left_edge or is_at_right_edge
-                    
-                    edge_color = (0, 165, 255) if is_at_edge else (255, 255, 255)
-                    edge_text = "AT EDGE!" if is_at_edge else "CENTERED"
-                    cv2.putText(frame, edge_text, (10, 240), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, edge_color, 2)
-                    
-                    # Draw edge zones
-                    if is_at_left_edge:
-                        cv2.rectangle(frame, (0, 0), (self.edge_threshold, self.frame_height), (0, 165, 255), 2)
-                    if is_at_right_edge:
-                        cv2.rectangle(frame, (self.frame_width - self.edge_threshold, 0), 
-                                     (self.frame_width, self.frame_height), (0, 165, 255), 2)
-                    
-                    # Draw all detections (not just the largest)
-                    for i, (hx, hy, hw, hh) in enumerate(human_boxes):
-                        if (hx, hy, hw, hh) != largest_box:
-                            cv2.rectangle(frame, (hx, hy), (hx + hw, hy + hh), (0, 255, 255), 1)
-                            cv2.putText(frame, f"#{i+1}", (hx, hy-10), 
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                    direction = "→" if x_error > 0 else "←" if x_error < 0 else "●"
+                    cv2.putText(frame, f"FAST TRACK {direction}: X={x_error:+.0f} D={distance_error:+.0f}", 
+                               (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                     
                 else:
                     # No human detected - use improved search behavior
@@ -241,20 +212,11 @@ class HumanTracker:
                     with self.lock:
                         self.last_human_center = None
                     
-                    # Draw "searching" indicator with more info
-                    cv2.putText(frame, f"Searching... ({self.frames_since_detection}/{self.max_frames_without_detection})", 
-                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    if self.last_valid_center is not None:
-                        cv2.putText(frame, f"Last seen at X: {self.last_valid_center}", (10, 60), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-                    cv2.line(frame, (self.target_x, 0), (self.target_x, self.frame_height), (128, 128, 128), 1)
+                    # SPEED OPTIMIZATION: Minimal search indicator
+                    cv2.putText(frame, f"SEARCHING... {self.frames_since_detection}/{self.max_frames_without_detection}", 
+                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                 
-                # Draw frame info
-                cv2.putText(frame, f"Frame: {self.frame_width}x{self.frame_height}", 
-                           (self.frame_width-200, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                cv2.putText(frame, f"Target X: {self.target_x}", 
-                           (self.frame_width-200, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                
+                # SPEED OPTIMIZATION: Skip extra frame info drawing
                 # Update camera manager with processed frame
                 self.camera_manager.set_processed_frame(frame)
                 
@@ -269,7 +231,7 @@ class HumanTracker:
         
     def _track_human(self, center_x: int, human_height: int):
         """
-        Control car movement to track human with improved stability.
+        Control car movement to track human with OPTIMIZED SPEED.
         
         Args:
             center_x: X coordinate of human center
@@ -284,25 +246,18 @@ class HumanTracker:
             x_error = center_x - self.target_x
             distance_error = self.target_distance - human_height
             
-            # Detect if human is at edge of frame
-            is_at_left_edge = center_x < self.edge_threshold
-            is_at_right_edge = center_x > (self.frame_width - self.edge_threshold)
-            is_at_edge = is_at_left_edge or is_at_right_edge
+            # SPEED OPTIMIZATION: Simplified edge detection
+            is_at_edge = center_x < self.edge_threshold or center_x > (self.frame_width - self.edge_threshold)
             
             # Calculate control outputs
             turn_output = self.pid_x.update(x_error)
             speed_output = self.pid_distance.update(distance_error)
             
-            # Apply adaptive scaling based on error magnitude and edge detection
+            # SPEED OPTIMIZATION: Simplified adaptive scaling
             if is_at_edge:
-                # Reduce turn response when at edge to prevent overshoot
-                turn_scale = 0.5  # Much gentler when at edge
-                speed_scale = 0.7  # Also reduce forward speed when turning
-                logger.info(f"EDGE DETECTION: Human at edge, reducing response")
-            elif abs(x_error) > 150:  # Large error (far from center)
-                turn_scale = 0.7   # Moderate response for large errors
+                turn_scale = 0.7  # Less aggressive reduction for faster response
                 speed_scale = 0.8
-            else:  # Normal operation
+            else:
                 turn_scale = 1.0
                 speed_scale = 1.0
             
@@ -310,38 +265,37 @@ class HumanTracker:
             forward_speed = max(-self.max_forward_speed, min(self.max_forward_speed, speed_output * speed_scale))
             turn_speed = max(-self.max_turn_speed, min(self.max_turn_speed, turn_output * turn_scale))
             
-            # Enhanced deadzones - larger when at edge
-            x_deadzone = 50 if is_at_edge else 30      # Larger deadzone at edge
-            distance_deadzone = 25 if is_at_edge else 20
+            # SPEED OPTIMIZATION: Reduced deadzones for faster response
+            x_deadzone = 25 if is_at_edge else 20      # Reduced from 50/30
+            distance_deadzone = 15 if is_at_edge else 10  # Reduced from 25/20
             
             if abs(x_error) < x_deadzone:
                 turn_speed = 0
             if abs(distance_error) < distance_deadzone:
                 forward_speed = 0
             
-            # Movement smoothing - average with recent movements
+            # SPEED OPTIMIZATION: Minimal movement smoothing
             current_movement = (forward_speed, turn_speed)
             self.movement_history.append(current_movement)
             if len(self.movement_history) > self.history_length:
                 self.movement_history.pop(0)
             
-            # Calculate smoothed movement
-            if len(self.movement_history) > 1:
+            # Light smoothing only when multiple samples available
+            if len(self.movement_history) >= 2:
                 avg_forward = sum(m[0] for m in self.movement_history) / len(self.movement_history)
                 avg_turn = sum(m[1] for m in self.movement_history) / len(self.movement_history)
                 
-                # Blend current with average (more smoothing at edges)
-                smooth_factor = 0.7 if is_at_edge else 0.3
+                # Less smoothing for faster response
+                smooth_factor = 0.3  # Reduced from 0.7/0.3
                 forward_speed = smooth_factor * avg_forward + (1 - smooth_factor) * forward_speed
                 turn_speed = smooth_factor * avg_turn + (1 - smooth_factor) * turn_speed
             
-            # Send commands to motor controller
+            # Send commands to motor controller immediately
             self.motor_controller.move_with_turn(forward_speed, turn_speed)
             
-            # Enhanced logging
-            edge_status = "EDGE" if is_at_edge else "CENTER"
-            logger.info(f"TRACKING [{edge_status}]: x_error={x_error:+4.0f}, dist_error={distance_error:+4.0f}, "
-                       f"turn={turn_speed:+4.1f}, speed={forward_speed:+4.1f}, scale=({turn_scale:.1f},{speed_scale:.1f})")
+            # Simplified logging for speed
+            logger.info(f"FAST_TRACK: x_err={x_error:+3.0f}, dist_err={distance_error:+3.0f}, "
+                       f"turn={turn_speed:+3.0f}, speed={forward_speed:+3.0f}")
                         
         except Exception as e:
             logger.error(f"Error in human tracking control: {e}")
