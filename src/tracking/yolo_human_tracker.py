@@ -524,9 +524,9 @@ class YOLOHumanTracker:
             turn_speed = max(-self.max_turn_speed, 
                            min(self.max_turn_speed, turn_output * turn_scale))
             
-            # ENSURE GENTLER MINIMUM MOVEMENT for ultra-smooth operation
-            min_turn_threshold = 15  # Reduced from 25 for gentler minimum turning force
-            min_forward_threshold = 12  # Reduced from 18 for gentler minimum forward force
+            # ENSURE EFFECTIVE MINIMUM MOVEMENT for motor resistance
+            min_turn_threshold = 20  # Increased from 15 for reliable motor movement
+            min_forward_threshold = 16  # Increased from 12 for reliable motor movement
             
             if turn_speed != 0:
                 if 0 < abs(turn_speed) < min_turn_threshold:
@@ -646,7 +646,7 @@ class YOLOHumanTracker:
                 return 0
             else:
                 # Continue current turn step with ultra-gentle speed for longer duration
-                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.25)  # Ultra-gentle speed (25%)
+                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.35)  # Balanced speed (35%)
                 logger.debug(f"STEP_TURN: Continuing step, speed={turn_speed}")
                 return turn_speed
         
@@ -657,10 +657,10 @@ class YOLOHumanTracker:
                 # Decide if we need another step
                 if abs(x_error) > 60:  # Still need to turn (outside deadzone)
                     if desired_direction == self.current_turn_direction:
-                        # Continue in same direction with ultra-gentle speed
+                        # Continue in same direction with balanced speed
                         self.is_in_turn_step = True
                         self.last_turn_step_time = current_time
-                        turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.25)
+                        turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.35)
                         logger.debug(f"STEP_TURN: Starting new step, same direction, speed={turn_speed}")
                         return turn_speed
                     else:
@@ -669,7 +669,7 @@ class YOLOHumanTracker:
                         if desired_direction != 0:
                             self.is_in_turn_step = True
                             self.last_turn_step_time = current_time
-                            turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.25)
+                            turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.35)
                             logger.debug(f"STEP_TURN: Starting new step, new direction, speed={turn_speed}")
                             return turn_speed
                         else:
@@ -693,7 +693,7 @@ class YOLOHumanTracker:
                 self.current_turn_direction = desired_direction
                 self.is_in_turn_step = True
                 self.last_turn_step_time = current_time
-                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.25)
+                turn_speed = self.current_turn_direction * (self.max_turn_speed * 0.35)
                 logger.debug(f"STEP_TURN: Starting first step, direction={desired_direction}, speed={turn_speed}")
                 return turn_speed
             else:
