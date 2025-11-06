@@ -164,9 +164,9 @@ class HumanTracker:
         self.lock = Lock()
         self.last_human_center = None
         
-        # PID controller parameters - TUNED FOR SMOOTH MOVEMENT
-        self.pid_x = PIDController(kp=0.25, ki=0.01, kd=0.08)      # Reduced kp for gentler turning
-        self.pid_distance = PIDController(kp=0.20, ki=0.005, kd=0.05)  # Reduced kp for gentler movement
+        # PID controller parameters - EXTRA GENTLE FOR VERY SMOOTH MOVEMENT
+        self.pid_x = PIDController(kp=0.15, ki=0.005, kd=0.05)      # Further reduced Kp for ultra-gentle turning
+        self.pid_distance = PIDController(kp=0.12, ki=0.002, kd=0.03)  # Further reduced Kp for ultra-gentle movement
         
         # Frame dimensions (will be set when camera starts)
         self.frame_width = 640
@@ -176,9 +176,9 @@ class HumanTracker:
         self.target_x = self.frame_width // 2  # Center of frame
         self.target_distance = 150  # Target human height in pixels
         
-        # SPEED OPTIMIZED control parameters - REDUCED FOR SMOOTH MOVEMENT
-        self.max_turn_speed = 35      # Reduced from 80 to 35 for gentler turns
-        self.max_forward_speed = 50   # Reduced from 90 to 50 for gentler approach
+        # SPEED OPTIMIZED control parameters - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
+        self.max_turn_speed = 25      # Further reduced from 35 to 25 for ultra-gentle turns
+        self.max_forward_speed = 35   # Further reduced from 50 to 35 for ultra-gentle approach
         
         # Edge detection and compensation
         self.edge_threshold = 80      # Reduced from 100 for faster edge response

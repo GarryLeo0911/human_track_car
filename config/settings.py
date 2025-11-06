@@ -12,23 +12,23 @@ MAX_DETECTION_SIZE = (300, 400)  # Added maximum size to filter out false positi
 MIN_ASPECT_RATIO = 1.5  # Minimum height/width ratio for human-like shapes
 MAX_ASPECT_RATIO = 4.0  # Maximum height/width ratio for human-like shapes
 
-# Tracking settings - TUNED FOR SMOOTH MOVEMENT
+# Tracking settings - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
 TARGET_HUMAN_HEIGHT = 150  # Target height in pixels (distance control)
-FRAME_CENTER_DEADZONE = 40  # Increased from 25 for less twitchy movement
-DISTANCE_DEADZONE = 20  # Pixel height difference to avoid jittery movement
+FRAME_CENTER_DEADZONE = 60  # Further increased from 40 for less twitchy movement
+DISTANCE_DEADZONE = 30  # Further increased for stable distance control
 
-# PID Controller settings - REDUCED FOR GENTLE MOVEMENT
-PID_X_KP = 0.25  # Reduced from 0.4 for gentler turning
-PID_X_KI = 0.01  # Reduced integral gain to prevent oscillation
-PID_X_KD = 0.08  # Derivative gain for stability
+# PID Controller settings - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
+PID_X_KP = 0.15  # Further reduced from 0.25 for ultra-gentle turning
+PID_X_KI = 0.005  # Further reduced integral gain
+PID_X_KD = 0.05  # Reduced derivative gain
 
-PID_DISTANCE_KP = 0.20  # Reduced from 0.25 for gentler forward/back
-PID_DISTANCE_KI = 0.005  # Reduced integral gain to prevent oscillation
-PID_DISTANCE_KD = 0.05  # Derivative gain for stability
+PID_DISTANCE_KP = 0.12  # Further reduced from 0.20 for ultra-gentle forward/back
+PID_DISTANCE_KI = 0.002  # Further reduced integral gain
+PID_DISTANCE_KD = 0.03  # Reduced derivative gain
 
-# Motor settings - REDUCED FOR SMOOTH MOVEMENT
-MAX_SPEED = 50  # Reduced from 100 for gentler movement
-MAX_TURN_SPEED = 35  # Reduced from 100 for smoother turning
+# Motor settings - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
+MAX_SPEED = 35  # Further reduced from 50 for ultra-gentle movement
+MAX_TURN_SPEED = 25  # Further reduced from 35 for ultra-gentle turning
 MOTOR_DEADZONE = 5  # Minimum speed to overcome motor friction
 
 # Web interface settings

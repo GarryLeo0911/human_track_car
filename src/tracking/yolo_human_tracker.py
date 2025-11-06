@@ -229,9 +229,9 @@ class YOLOHumanTracker:
         self.lock = Lock()
         self.last_human_center = None
         
-        # PID controller parameters - TUNED FOR SMOOTH MOVEMENT
-        self.pid_x = PIDController(kp=0.25, ki=0.01, kd=0.08)      # Reduced Kp for gentler turning
-        self.pid_distance = PIDController(kp=0.20, ki=0.005, kd=0.05)  # Reduced Kp for gentler forward/back
+        # PID controller parameters - EXTRA GENTLE FOR VERY SMOOTH MOVEMENT
+        self.pid_x = PIDController(kp=0.15, ki=0.005, kd=0.05)      # Further reduced Kp for ultra-gentle turning
+        self.pid_distance = PIDController(kp=0.12, ki=0.002, kd=0.03)  # Further reduced Kp for ultra-gentle movement
         
         # Frame dimensions (will be set when camera starts)
         self.frame_width = 640
@@ -241,9 +241,9 @@ class YOLOHumanTracker:
         self.target_x = self.frame_width // 2
         self.target_distance = 150  # Target human height in pixels
         
-        # Control parameters - REDUCED FOR SMOOTH MOVEMENT
-        self.max_turn_speed = 35      # Reduced from 70 to 35 for gentler turns
-        self.max_forward_speed = 50   # Reduced from 85 to 50 for gentler approach/retreat
+        # Control parameters - ULTRA GENTLE FOR VERY SMOOTH MOVEMENT
+        self.max_turn_speed = 25      # Further reduced from 35 to 25 for ultra-gentle turns
+        self.max_forward_speed = 35   # Further reduced from 50 to 35 for ultra-gentle approach/retreat
         
         # Edge detection and compensation
         self.edge_threshold = 80
@@ -255,9 +255,9 @@ class YOLOHumanTracker:
         self.recent_detections = []
         self.detection_history_length = 5
         
-        # Movement smoothing - ENHANCED FOR STABILITY
+        # Movement smoothing - MAXIMUM SMOOTHING FOR ULTRA GENTLE MOVEMENT
         self.movement_history = []
-        self.history_length = 5       # Increased from 3 to 5 for more smoothing
+        self.history_length = 7       # Increased from 5 to 7 for maximum smoothing
         
         # Performance tracking
         self.detection_times = []
@@ -447,14 +447,16 @@ class YOLOHumanTracker:
                 turn_scale = 1.0
                 speed_scale = 1.0
             
-            # ADDITIONAL: Gentle scaling based on how centered the human is
+            # ADDITIONAL: Extra gentle scaling based on how centered the human is
             center_factor = abs(x_error) / (self.frame_width / 2)  # 0.0 = perfectly centered, 1.0 = at edge
             center_factor = min(1.0, center_factor)  # Cap at 1.0
             
-            # Reduce turn speed when human is already mostly centered
-            if center_factor < 0.3:  # Within 30% of center
-                turn_scale *= 0.5  # Very gentle movements when close to center
-            elif center_factor < 0.6:  # Within 60% of center  
+            # Reduce turn speed even more aggressively when human is already mostly centered
+            if center_factor < 0.2:  # Within 20% of center (was 30%)
+                turn_scale *= 0.3  # Very very gentle movements (was 0.5)
+            elif center_factor < 0.4:  # Within 40% of center (was 60%)
+                turn_scale *= 0.5  # Very gentle movements (was 0.7)
+            elif center_factor < 0.7:  # Within 70% of center (new tier)
                 turn_scale *= 0.7  # Moderately gentle movements
             
             # Apply scaling and limits
@@ -463,9 +465,9 @@ class YOLOHumanTracker:
             turn_speed = max(-self.max_turn_speed, 
                            min(self.max_turn_speed, turn_output * turn_scale))
             
-            # Deadzones - ENLARGED FOR STABILITY (less twitchy)
-            x_deadzone = 40      # Increased from 20 to 40 for larger center zone
-            distance_deadzone = 20  # Increased from 12 to 20 for stable distance
+            # Deadzones - FURTHER ENLARGED FOR MAXIMUM STABILITY
+            x_deadzone = 60      # Increased from 40 to 60 for even larger center zone
+            distance_deadzone = 30  # Increased from 20 to 30 for more stable distance
             
             if abs(x_error) < x_deadzone:
                 turn_speed = 0
@@ -478,17 +480,17 @@ class YOLOHumanTracker:
             if len(self.movement_history) > self.history_length:
                 self.movement_history.pop(0)
             
-            # Apply smoothing - ENHANCED FOR SMOOTH MOVEMENT
+            # Apply smoothing - MAXIMUM SMOOTHING FOR ULTRA GENTLE MOVEMENT
             if len(self.movement_history) >= 2:
                 avg_forward = sum(m[0] for m in self.movement_history) / len(self.movement_history)
                 avg_turn = sum(m[1] for m in self.movement_history) / len(self.movement_history)
                 
-                smooth_factor = 0.7  # Increased from 0.4 to 0.7 for much more smoothing
+                smooth_factor = 0.85  # Increased from 0.7 to 0.85 for maximum smoothing
                 forward_speed = smooth_factor * avg_forward + (1 - smooth_factor) * forward_speed
                 turn_speed = smooth_factor * avg_turn + (1 - smooth_factor) * turn_speed
                 
-                # Additional gentle limiting to prevent sudden changes
-                max_change_per_frame = 10  # Maximum change in speed per frame
+                # Additional ultra-gentle limiting to prevent sudden changes
+                max_change_per_frame = 5  # Reduced from 10 to 5 for ultra-gentle changes
                 if hasattr(self, 'prev_forward_speed'):
                     forward_diff = forward_speed - self.prev_forward_speed
                     if abs(forward_diff) > max_change_per_frame:
