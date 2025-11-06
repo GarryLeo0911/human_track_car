@@ -17,7 +17,10 @@ class HumanDetector:
     def __init__(self):
         """Initialize the HOG descriptor for human detection."""
         self.hog = cv2.HOGDescriptor()
-        self.hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+        # Use numpy array for the detector
+        import numpy as np
+        detector = cv2.HOGDescriptor.getDefaultPeopleDetector()
+        self.hog.setSVMDetector(np.array(detector, dtype=np.float32))
         
     def detect_humans(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
         """
@@ -30,23 +33,31 @@ class HumanDetector:
             List of bounding boxes (x, y, w, h) for detected humans
         """
         try:
-            # Resize frame for faster processing
+            # Preprocess frame for better detection
             height, width = frame.shape[:2]
-            if width > 640:
-                scale = 640 / width
-                new_width = 640
+            
+            # Convert to grayscale for HOG (more stable)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # Enhance contrast for better detection
+            gray = cv2.equalizeHist(gray)
+            
+            # Resize frame for processing (keep original aspect ratio)
+            if width > 480:
+                scale = 480 / width
+                new_width = 480
                 new_height = int(height * scale)
-                frame_resized = cv2.resize(frame, (new_width, new_height))
+                gray_resized = cv2.resize(gray, (new_width, new_height))
             else:
-                frame_resized = frame.copy()
+                gray_resized = gray.copy()
                 scale = 1.0
             
-            # Detect people
+            # Detect people with improved parameters
             boxes, weights = self.hog.detectMultiScale(
-                frame_resized,
-                winStride=(8, 8),
-                padding=(32, 32),
-                scale=1.05
+                gray_resized,
+                winStride=(4, 4),        # Smaller stride for better detection
+                padding=(16, 16),        # Smaller padding  
+                scale=1.02               # Smaller scale step for more thorough search
             )
             
             # Scale boxes back to original size
@@ -54,11 +65,15 @@ class HumanDetector:
                 boxes = [(int(x/scale), int(y/scale), int(w/scale), int(h/scale)) 
                         for x, y, w, h in boxes]
             
-            # Filter detections by confidence
+            # Filter detections
             confident_boxes = []
             for i, (x, y, w, h) in enumerate(boxes):
-                if weights[i] > 0.5:  # Confidence threshold
-                    confident_boxes.append((x, y, w, h))
+                # Lower confidence threshold and add size filtering
+                if weights[i] > 0.3:  # Lower confidence threshold
+                    # Filter by reasonable human dimensions
+                    aspect_ratio = h / w if w > 0 else 0
+                    if 1.2 < aspect_ratio < 4.0 and w > 30 and h > 60:  # Reasonable human proportions
+                        confident_boxes.append((x, y, w, h))
             
             return confident_boxes
             
@@ -135,15 +150,56 @@ class HumanTracker:
                     # Calculate control commands
                     self._track_human(center_x, human_height)
                     
-                    # Draw detection on frame
+                    # Draw detection on frame with enhanced visualization
+                    # Main bounding box
                     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                    cv2.circle(frame, (center_x, center_y), 5, (0, 0, 255), -1)
+                    
+                    # Center point
+                    cv2.circle(frame, (center_x, center_y), 8, (0, 0, 255), -1)
+                    cv2.circle(frame, (center_x, center_y), 12, (255, 255, 255), 2)
+                    
+                    # Target center line
+                    cv2.line(frame, (self.target_x, 0), (self.target_x, self.frame_height), (255, 0, 0), 2)
+                    
+                    # Distance and error info
+                    x_error = center_x - self.target_x
+                    distance_error = self.target_distance - human_height
+                    
+                    # Status text
+                    cv2.putText(frame, f"Target Found", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                    cv2.putText(frame, f"Center: ({center_x}, {center_y})", (10, 60), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    cv2.putText(frame, f"Size: {w}x{h}", (10, 90), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    cv2.putText(frame, f"X Error: {x_error}", (10, 120), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                    cv2.putText(frame, f"Dist Error: {distance_error}", (10, 150), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                    
+                    # Draw all detections (not just the largest)
+                    for i, (hx, hy, hw, hh) in enumerate(human_boxes):
+                        if (hx, hy, hw, hh) != largest_box:
+                            cv2.rectangle(frame, (hx, hy), (hx + hw, hy + hh), (0, 255, 255), 1)
+                            cv2.putText(frame, f"#{i+1}", (hx, hy-10), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
                     
                 else:
                     # No human detected, stop motors
                     self.motor_controller.stop()
                     with self.lock:
                         self.last_human_center = None
+                    
+                    # Draw "searching" indicator
+                    cv2.putText(frame, "Searching for humans...", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    cv2.line(frame, (self.target_x, 0), (self.target_x, self.frame_height), (128, 128, 128), 1)
+                
+                # Draw frame info
+                cv2.putText(frame, f"Frame: {self.frame_width}x{self.frame_height}", 
+                           (self.frame_width-200, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(frame, f"Target X: {self.target_x}", 
+                           (self.frame_width-200, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 
                 # Update camera manager with processed frame
                 self.camera_manager.set_processed_frame(frame)
@@ -187,8 +243,8 @@ class HumanTracker:
             # Send commands to motor controller
             self.motor_controller.move_with_turn(forward_speed, turn_speed)
             
-            logger.debug(f"Tracking: x_error={x_error}, dist_error={distance_error}, "
-                        f"turn={turn_speed}, speed={forward_speed}")
+            logger.info(f"TRACKING: x_error={x_error:+4.0f}, dist_error={distance_error:+4.0f}, "
+                       f"turn={turn_speed:+4.0f}, speed={forward_speed:+4.0f}")
                         
         except Exception as e:
             logger.error(f"Error in human tracking control: {e}")

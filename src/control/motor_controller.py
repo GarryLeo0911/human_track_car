@@ -96,6 +96,7 @@ class MotorController:
     def _init_simulation_mode(self):
         """Initialize simulation mode for testing."""
         logger.info("Motor controller initialized in simulation mode")
+        logger.info("Motor commands will be logged but not executed on real hardware")
         self.motors = None
         
     def move_forward(self, speed: float = 50):
@@ -116,7 +117,7 @@ class MotorController:
                 for motor in self.motors:
                     motor.throttle = throttle
             else:
-                logger.debug(f"SIM: Moving forward at speed {speed}%")
+                logger.info(f"SIM: Moving forward at speed {speed}%")
                 
     def move_backward(self, speed: float = 50):
         """
@@ -136,7 +137,7 @@ class MotorController:
                 for motor in self.motors:
                     motor.throttle = throttle
             else:
-                logger.debug(f"SIM: Moving backward at speed {speed}%")
+                logger.info(f"SIM: Moving backward at speed {speed}%")
                 
     def turn_left(self, speed: float = 50):
         """
@@ -158,7 +159,7 @@ class MotorController:
                 self.motor_right_front.throttle = throttle
                 self.motor_right_rear.throttle = throttle
             else:
-                logger.debug(f"SIM: Turning left at speed {speed}%")
+                logger.info(f"SIM: Turning left at speed {speed}%")
                 
     def turn_right(self, speed: float = 50):
         """
@@ -180,7 +181,7 @@ class MotorController:
                 self.motor_right_front.throttle = -throttle
                 self.motor_right_rear.throttle = -throttle
             else:
-                logger.debug(f"SIM: Turning right at speed {speed}%")
+                logger.info(f"SIM: Turning right at speed {speed}%")
                 
     def move_with_turn(self, forward_speed: float, turn_speed: float):
         """
@@ -221,7 +222,7 @@ class MotorController:
                 self.motor_right_rear.throttle = right_throttle
                 
             else:
-                logger.debug(f"SIM: Moving - Forward: {forward_speed}%, Turn: {turn_speed}%")
+                logger.info(f"SIM: Moving - Forward: {forward_speed}%, Turn: {turn_speed}%")
                 
     def stop(self):
         """Stop all motors."""
@@ -234,7 +235,7 @@ class MotorController:
                 for motor in self.motors:
                     motor.throttle = 0
             else:
-                logger.debug("SIM: Stopping all motors")
+                logger.info("SIM: Stopping all motors")
                 
     def get_status(self) -> dict:
         """Get current motor status."""
