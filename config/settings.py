@@ -28,16 +28,16 @@ PID_DISTANCE_KP = 0.12  # Keep distance PID gentle
 PID_DISTANCE_KI = 0.002  # Keep distance PID gentle
 PID_DISTANCE_KD = 0.03  # Keep distance PID gentle
 
-# Motor settings - INCREASED TURNING POWER TO OVERCOME RESISTANCE  
-MAX_SPEED = 60  # Increased from 35 to overcome resistance
-MAX_TURN_SPEED = 70  # Further increased from 45 for stronger turning force
+# Motor settings - BALANCED SPEED FOR LONGER DURATION STEPS  
+MAX_SPEED = 50  # Reduced from 60 - moderate speed for effective movement
+MAX_TURN_SPEED = 50  # Reduced from 70 - moderate speed with longer duration
 MOTOR_DEADZONE = 5  # Minimum speed to overcome motor friction
 
-# Step-by-step turning settings for ultra-smooth movement
+# Step-by-step turning settings - BALANCED SPEED AND DURATION
 STEP_TURN_ENABLED = True
-TURN_STEP_DURATION = 0.3  # Seconds per turn step
-TURN_PAUSE_DURATION = 0.2  # Pause between steps to reassess
-TURN_STEP_SPEED_FACTOR = 0.4  # Fraction of max speed for step turns
+TURN_STEP_DURATION = 0.8  # Increased from 0.3 to 0.8 for longer, more effective steps
+TURN_PAUSE_DURATION = 0.4  # Increased from 0.2 for better assessment time
+TURN_STEP_SPEED_FACTOR = 0.6  # Moderate speed (increased from 0.4) for effective turning
 
 # Web interface settings
 WEB_HOST = '0.0.0.0'
