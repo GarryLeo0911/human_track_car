@@ -4,6 +4,7 @@ Provides web interface for controlling and monitoring the human tracking car.
 """
 
 from flask import Flask, render_template, Response, jsonify, request
+from flask_cors import CORS
 import logging
 import time
 from src.camera.camera_manager import StreamingHandler
@@ -24,6 +25,28 @@ def create_app(human_tracker):
                 template_folder='../../templates',
                 static_folder='../../static')
     
+    # Enable CORS for cross-origin requests (needed for SOFT3888 integration)
+    CORS(app, resources={
+        r"/video_feed": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
+            "supports_credentials": False
+        },
+        r"/api/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
+            "supports_credentials": False
+        },
+        r"/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type"],
+            "supports_credentials": False
+        }
+    })
+    
     # Store tracker reference (can be None initially)
     app.human_tracker = human_tracker
     
@@ -40,7 +63,7 @@ def create_app(human_tracker):
         
     @app.route('/video_feed')
     def video_feed():
-        """Video streaming route."""
+        """Video streaming route with CORS headers."""
         def generate():
             while True:
                 try:
@@ -70,8 +93,18 @@ def create_app(human_tracker):
                     logger.error(f"Error in video feed: {e}")
                     time.sleep(1)
                     
-        return Response(generate(),
-                       mimetype='multipart/x-mixed-replace; boundary=frame')
+        response = Response(generate(),
+                           mimetype='multipart/x-mixed-replace; boundary=frame')
+        
+        # Add explicit CORS headers for video stream
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        return response
             
     @app.route('/api/status')
     def get_status():
